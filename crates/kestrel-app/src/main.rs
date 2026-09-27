@@ -34,13 +34,6 @@ fn main() {
         return;
     }
 
-    // Smoke-test mode: <binary> --smoke-test <outdir>
-    let smoke_dir = args
-        .iter()
-        .position(|a| a == "--smoke-test")
-        .and_then(|i| args.get(i + 1))
-        .map(std::path::PathBuf::from);
-
     // Settings must be read before any WebKit initialization because some
     // knobs are environment-based (renderer backend).
     if kestrel_data::dirs::ensure_dirs().is_err() {
@@ -55,33 +48,34 @@ fn main() {
         std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
     }
 
-    // URL-looking args (http/https, or dotted host), skipping CLI flags and
-    // the smoke-test outdir argument.
-    let mut urls: Vec<String> = Vec::new();
-    let mut skip_next = false;
-    for a in args.iter().skip(1) {
-        if skip_next {
-            skip_next = false;
-            continue;
-        }
-        if a == "--smoke-test" {
-            skip_next = true;
-            continue;
-        }
-        if a.starts_with('-') {
-            continue;
-        }
-        if a.starts_with("http://") || a.starts_with("https://") || (a.contains('.') && !a.contains('/')) {
-            urls.push(a.clone());
-        }
-    }
-
     gtk::init().expect("GTK init");
 
     let app = gtk::Application::builder()
         .application_id(APP_ID)
         .flags(gtk::gio::ApplicationFlags::HANDLES_OPEN)
         .build();
+
+    let smoke_cell: RefCell<Option<std::path::PathBuf>> = RefCell::new(None);
+    app.add_main_option(
+        "smoke-test",
+        b'0'.into(),
+        gtk::glib::OptionFlags::NONE,
+        gtk::glib::OptionArg::String,
+        "run the built-in smoke test, writing evidence to DIR",
+        Some("DIR"),
+    );
+    app.connect_handle_local_options(glib::clone!(
+        #[weak]
+        app,
+        move |_, dict| {
+            if let Some(v) = dict.lookup_value("smoke-test", gtk::glib::VariantTy::STRING) {
+                if let Some(dir) = v.str() {
+                    *smoke_cell.borrow_mut() = Some(std::path::PathBuf::from(dir));
+                }
+            }
+            -1 // continue normal startup
+        }
+    ));
 
     let state = state::AppState::new(settings);
     {
@@ -92,8 +86,7 @@ fn main() {
         });
     }
 
-    let urls_cell = RefCell::new(urls.clone());
-    let smoke_cell = RefCell::new(smoke_dir.clone());
+    let urls_cell: RefCell<Vec<String>> = RefCell::new(Vec::new());
     {
         let state2 = state.clone();
         app.connect_activate(move |app| {
