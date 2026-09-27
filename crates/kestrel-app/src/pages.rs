@@ -29,7 +29,7 @@ pub fn register_scheme(state: &Rc<AppState>) {
         // kestrel://assets/app.css), so path() would return "/app.css" and
         // every embedded asset would 404. Taking the raw uri keeps the
         // first segment in the matched key.
-        let uri = request.uri().to_string();
+        let uri = request.uri().map(|u| u.to_string()).unwrap_or_default();
         let rest = uri.strip_prefix("kestrel://").unwrap_or(&uri);
         let path = rest.split(['?', '#']).next().unwrap_or("");
         let path = path.trim_start_matches('/');
