@@ -26,10 +26,17 @@ set +e
 timeout 90 "$BIN" --smoke-test "$OUT" &
 APP_PID=$!
 
-# Give the UI time to map, then capture the real window contents.
-sleep 12
+# The app writes smoke-report.json ~2.5s before it exits by itself.
+# Capture the real window contents inside that grace window (fixed sleeps
+# race the app's actual finish time and produce black captures).
+for i in $(seq 1 60); do
+  [ -s "$OUT/smoke-report.json" ] && break
+  # app died early without a report → let `wait` report the failure
+  kill -0 "$APP_PID" 2>/dev/null || break
+  sleep 1
+done
 import -window root "$OUT/window-full.png" 2>/dev/null || true
-sleep 3
+sleep 1.2
 import -window root "$OUT/window-final.png" 2>/dev/null || true
 
 wait "$APP_PID"

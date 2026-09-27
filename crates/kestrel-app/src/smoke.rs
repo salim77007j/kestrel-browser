@@ -31,7 +31,13 @@ pub fn run(w: &Rc<BrowserWindow>, outdir: PathBuf) {
         ),
     );
 
-    let test_uri = format!("file://{}", test_page.to_string_lossy());
+    let test_uri = {
+        // Must be an ABSOLUTE path: "file://" + relative path would make the
+        // directory a URL host and WebKit would fail the load.
+        let abs = std::fs::canonicalize(&test_page)
+            .unwrap_or_else(|_| test_page.clone());
+        format!("file://{}", abs.to_string_lossy())
+    };
 
     // Open three representative tabs (foreground one by one).
     let t1 = w.new_tab("kestrel://newtab", true, false);
@@ -46,21 +52,28 @@ pub fn run(w: &Rc<BrowserWindow>, outdir: PathBuf) {
     glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
         // Wait until the compiled content filter is active (max 45s) so the
         // evidence reflects the fully-initialized privacy stack.
-        if state.filters_active.load(std::sync::atomic::Ordering::SeqCst)
-            || start.elapsed() > std::time::Duration::from_secs(45)
-        {
-            if let Some(w) = w_weak.upgrade() {
-                capture_all(&state, &w, &outdir_a);
+        let active = state.filters_active.load(std::sync::atomic::Ordering::SeqCst);
+        let expired = start.elapsed() > std::time::Duration::from_secs(45);
+        if !(active || expired) {
+            return glib::ControlFlow::Continue;
+        }
+        // Stage 2: give the pages a moment more so titles/URIs settle,
+        // then capture evidence while the app is still running.
+        let state2 = state.clone();
+        let w_weak2 = w_weak.clone();
+        let outdir_b = outdir_a.clone();
+        glib::timeout_add_local(std::time::Duration::from_millis(2500), move || {
+            if let Some(w) = w_weak2.upgrade() {
+                capture_all(&state2, &w, &outdir_b);
             }
             glib::ControlFlow::Break
-        } else {
-            glib::ControlFlow::Continue
-        }
+        });
+        glib::ControlFlow::Break
     });
 
     // Hard deadline: exit with failure if we somehow hang.
     let outdir2 = outdir.clone();
-    glib::timeout_add_local(std::time::Duration::from_millis(45_000), move || {
+    glib::timeout_add_local(std::time::Duration::from_millis(60_000), move || {
         let report = serde_json::json!({
             "status": "timeout",
             "dir": outdir2.to_string_lossy(),
