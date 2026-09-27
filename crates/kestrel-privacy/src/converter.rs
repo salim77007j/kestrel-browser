@@ -137,6 +137,9 @@ fn convert_rule(raw: &str) -> Option<Value> {
 
     // Pattern -> url-filter regex.
     let url_filter = pattern_to_regex(pattern)?;
+    if !webkit_safe(&url_filter) {
+        return None;
+    }
 
     let mut trigger = json!({ "url-filter": url_filter });
     if !resource_type.is_empty() {
@@ -185,7 +188,12 @@ fn pattern_to_regex(pattern: &str) -> Option<String> {
             re.push(')');
         }
         if anchored_end {
-            re.push_str("([/?#:]|$)");
+            // Boundary after the host/path. WebKit's content-filter regex
+            // engine rejects disjunctions (`|`), so we cannot write
+            // `([/?#:]|$)`. A character class is universally supported;
+            // bare-host URLs ("https://host") are canonicalized by WebKit
+            // to include a trailing `/`, so the class still matches them.
+            re.push_str("[/?:#]");
         }
         Some(re)
     } else if pattern.starts_with('|') && !pattern.starts_with("||") {
@@ -198,6 +206,12 @@ fn pattern_to_regex(pattern: &str) -> Option<String> {
     }
 }
 
+/// WebKit compiles the whole store in one shot: a single unsupported regex
+/// fails EVERY rule. Fail safe — never emit a pattern the engine rejects.
+fn webkit_safe(re: &str) -> bool {
+    !re.contains('|') && !re.contains("(?=") && !re.contains("(?!") && !re.contains("\\1")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,13 +222,50 @@ mod tests {
         let json = convert_rule("||ads.example.com^").unwrap();
         assert_eq!(json["action"]["type"], "block");
         assert!(re.starts_with("^[^:]+://"));
+        // WebKit rejects disjunctions — none may ever be emitted.
+        assert!(!re.contains('|'));
         let matcher = regex::Regex::new(&re).unwrap();
         // matches subdomain forms
         assert!(matcher.is_match("https://cdn.ads.example.com/x/y"));
         assert!(matcher.is_match("https://ads.example.com/"));
+        // bare host — canonicalized by WebKit to a trailing slash
+        assert!(matcher.is_match("http://ads.example.com/"));
+        // port + query forms
+        assert!(matcher.is_match("https://ads.example.com:8080/a"));
+        assert!(matcher.is_match("https://ads.example.com/?q=1"));
         // must NOT match reverse-host tricks
         assert!(!matcher.is_match("https://ads.example.com.evil.io/a"));
         assert!(!matcher.is_match("https://example.com/"));
+    }
+
+    #[test]
+    fn host_anchor_with_path() {
+        let re = pattern_to_regex("||tracker.net/pixel.js^").unwrap();
+        assert!(!re.contains('|'));
+        let matcher = regex::Regex::new(&re).unwrap();
+        assert!(matcher.is_match("https://tracker.net/pixel.js"));
+        assert!(matcher.is_match("https://a.tracker.net/pixel.js?x=1"));
+        assert!(!matcher.is_match("https://tracker.net/other.js"));
+    }
+
+    #[test]
+    fn every_converted_rule_is_webkit_safe() {
+        // The whole seed corpus (both bundled lists) must convert without
+        // a single disjunction — one bad regex fails the entire store.
+        let rules: Vec<String> = crate::lists::SEED_EASYLIST
+            .lines()
+            .chain(crate::lists::SEED_EASYPRIVACY.lines())
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect();
+        let json = to_content_blocker(&rules, 120_000).unwrap();
+        let parsed: Vec<Value> = serde_json::from_str(&json).unwrap();
+        assert!(!parsed.is_empty(), "converter produced no rules");
+        for rule in &parsed {
+            let uf = rule["trigger"]["url-filter"].as_str().unwrap();
+            assert!(!uf.contains('|'), "disjunction in url-filter: {uf}");
+            assert!(!uf.contains("(?="), "lookahead in url-filter: {uf}");
+        }
     }
 
     #[test]
