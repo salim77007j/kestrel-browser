@@ -159,7 +159,6 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
             LoadEvent::Committed => {
                 inject_cosmetic(&state2, v);
             }
-            _ => {}
             LoadEvent::Finished => {
                 tab2.spinner.stop();
                 tab2.spinner.set_visible(false);
@@ -530,7 +529,7 @@ fn quick_prompt(msg: &str, default_text: Option<String>) -> Option<String> {
         #[strong]
         tx,
         move |d, r| {
-            d.hide();
+            d.set_visible(false);
             let _ = tx.send(r);
         }
     ));

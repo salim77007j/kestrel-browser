@@ -64,18 +64,14 @@ fn main() {
         "run the built-in smoke test, writing evidence to DIR",
         Some("DIR"),
     );
-    app.connect_handle_local_options(glib::clone!(
-        #[weak]
-        app,
-        move |_, dict| {
-            if let Some(v) = dict.lookup_value("smoke-test", gtk::glib::VariantTy::STRING) {
-                if let Some(dir) = v.str() {
-                    *smoke_cell.borrow_mut() = Some(std::path::PathBuf::from(dir));
-                }
+    app.connect_handle_local_options(move |_, dict| {
+        if let Some(v) = dict.lookup_value("smoke-test", Some(gtk::glib::VariantTy::STRING)) {
+            if let Some(dir) = v.str() {
+                *smoke_cell.borrow_mut() = Some(std::path::PathBuf::from(dir));
             }
-            -1 // continue normal startup
         }
-    ));
+        -1 // continue normal startup
+    });
 
     let state = state::AppState::new(settings);
     {
