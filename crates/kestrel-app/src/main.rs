@@ -70,7 +70,7 @@ fn main() {
                 *smoke_cell.borrow_mut() = Some(std::path::PathBuf::from(dir));
             }
         }
-        glib::ControlFlow::Continue // continue normal startup
+        std::ops::ControlFlow::Continue(glib::ExitCode::from(-1)) // continue normal startup
     });
 
     let state = state::AppState::new(settings);
