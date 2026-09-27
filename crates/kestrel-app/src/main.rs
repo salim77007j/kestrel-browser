@@ -96,10 +96,10 @@ fn main() {
     let smoke_cell = RefCell::new(smoke_dir.clone());
     {
         let state2 = state.clone();
-    app.connect_activate(move |app| {
-            let w = window::BrowserWindow::new(app, &state);
+        app.connect_activate(move |app| {
+            let w = window::BrowserWindow::new(app, &state2);
             w.present();
-            state.add_window(&w);
+            state2.add_window(&w);
 
             let urls = urls_cell.borrow().clone();
             if !urls.is_empty() {
@@ -110,8 +110,7 @@ fn main() {
             if let Some(dir) = smoke_cell.borrow().clone() {
                 smoke::run(&w, dir);
             }
-        }
-    });
+        });
     }
 
     // Additional instances hand their URLs to the primary instance.
