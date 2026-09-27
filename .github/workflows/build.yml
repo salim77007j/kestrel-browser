@@ -1,0 +1,75 @@
+name: Kestrel CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+    name: Build & test (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-4-dev libwebkitgtk-6.0-dev libdbus-1-dev \
+            xvfb imagemagick fonts-dejavu-core fonts-liberation \
+            dpkg-dev file
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: kestrel-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: kestrel-${{ runner.os }}-
+
+      - name: cargo check
+        run: cargo check --workspace --all-targets
+
+      - name: Unit tests
+        run: cargo test -p kestrel-privacy -p kestrel-data
+
+      - name: Build release binary
+        run: cargo build --release --workspace
+
+      - name: Smoke test under Xvfb (real launch, render, screenshots)
+        run: |
+          export GITHUB_SHA_SHORT="${GITHUB_SHA::7}"
+          bash scripts/smoke-test.sh target/release/kestrel smoke
+
+      - name: Resource usage measurement
+        run: bash scripts/measure.sh target/release/kestrel smoke/metrics.csv
+
+      - name: Package (tar.gz + deb)
+        run: bash scripts/package.sh target/release/kestrel packaging dist
+
+      - name: Upload browser artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kestrel-linux-amd64
+          path: dist/*
+
+      - name: Upload smoke-test evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: kestrel-smoke-evidence
+          path: smoke/*

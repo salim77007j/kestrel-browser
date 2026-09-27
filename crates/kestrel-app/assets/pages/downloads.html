@@ -1,0 +1,70 @@
+<!doctype html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>Downloads — Kestrel</title>
+  <link rel="stylesheet" href="kestrel://assets/app.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">K</span> Kestrel</div>
+    <nav>
+      <a href="kestrel://newtab">New Tab</a>
+      <a href="kestrel://settings">Settings</a>
+      <a href="kestrel://privacy">Privacy Dashboard</a>
+      <a href="kestrel://bookmarks">Bookmarks</a>
+      <a href="kestrel://history">History</a>
+      <a href="kestrel://downloads" class="active">Downloads</a>
+    </nav>
+  </aside>
+  <main class="main">
+    <h1>Downloads</h1>
+    <p class="sub">Managed by the browser core — files land in your download directory.</p>
+    <div class="card">
+      <div class="right" style="justify-content:flex-end">
+        <button class="k danger" id="clear">Clear finished</button>
+      </div>
+      <ul class="entry-list" id="list"></ul>
+    </div>
+  </main>
+</div>
+<script src="kestrel://assets/app.js"></script>
+<script>
+function fmtSize(n) {
+  if (!n) return "";
+  var units = ["B", "KB", "MB", "GB"];
+  var i = 0; var v = n;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return v.toFixed(v >= 100 || i === 0 ? 0 : 1) + " " + units[i];
+}
+window.pageRender = function (state) {
+  if (!state) return;
+  var ul = document.getElementById("list");
+  ul.innerHTML = "";
+  var items = state.downloads || [];
+  if (!items.length) {
+    ul.innerHTML = '<div class="empty">No downloads yet.</div>';
+    return;
+  }
+  items.forEach(function (d) {
+    var li = document.createElement("li");
+    var cls = d.state === "done" ? "pill" : (d.state === "failed" ? "pill bad" : "pill warn");
+    var label = d.state === "done" ? "done" : (d.state === "failed" ? "failed" : "active");
+    li.innerHTML = '<span class="favicon">↓</span>' +
+      '<span class="meta"><span class="t">' + __kestrel.esc(d.file || d.uri) + '</span><span class="s">' + __kestrel.esc(d.dest || d.uri) + '</span></span>' +
+      '<span class="s">' + fmtSize(d.received) + (d.total ? " / " + fmtSize(d.total) : "") + '</span>' +
+      '<span class="' + cls + '">' + label + '</span>';
+    if (d.dest && d.state === "done") {
+      var open = document.createElement("button");
+      open.className = "iconbtn"; open.textContent = "↗"; open.title = "Open file";
+      open.addEventListener("click", function () { __kestrel.send("open-file", { value: d.dest }); });
+      li.appendChild(open);
+    }
+    ul.appendChild(li);
+  });
+};
+document.getElementById("clear").addEventListener("click", function () { __kestrel.send("clear-downloads"); });
+</script>
+</body>
+</html>

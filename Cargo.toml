@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/kestrel-privacy",
+    "crates/kestrel-data",
+    "crates/kestrel-app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+authors = ["Kestrel Team"]
+repository = "https://github.com/salim77007j/kestrel-browser"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "unwind"

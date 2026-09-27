@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B0E12"/>
+      <stop offset="1" stop-color="#141B23"/>
+    </linearGradient>
+    <linearGradient id="bird" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2DD4BF"/>
+      <stop offset="1" stop-color="#0EA5E9"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)" stroke="#262D37" stroke-width="2"/>
+  <!-- stylized kestrel in a dive (fast, light, precise) -->
+  <path d="M128 52
+           C 150 84, 186 104, 208 108
+           C 184 118, 162 118, 148 112
+           C 158 132, 174 146, 190 152
+           C 162 156, 138 148, 126 134
+           C 118 160, 106 180, 84 196
+           C 96 168, 98 144, 92 126
+           C 74 140, 54 144, 36 140
+           C 58 128, 72 114, 78 100
+           C 96 84, 112 68, 128 52 Z"
+        fill="url(#bird)"/>
+  <circle cx="132" cy="86" r="7" fill="#0B0E12"/>
+</svg>

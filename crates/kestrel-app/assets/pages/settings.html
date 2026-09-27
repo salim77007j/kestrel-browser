@@ -1,0 +1,259 @@
+<!doctype html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>Settings — Kestrel</title>
+  <link rel="stylesheet" href="kestrel://assets/app.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">K</span> Kestrel</div>
+    <nav>
+      <a href="kestrel://newtab">New Tab</a>
+      <a href="kestrel://settings" class="active">Settings</a>
+      <a href="kestrel://privacy">Privacy Dashboard</a>
+      <a href="kestrel://bookmarks">Bookmarks</a>
+      <a href="kestrel://history">History</a>
+      <a href="kestrel://downloads">Downloads</a>
+    </nav>
+  </aside>
+  <main class="main">
+    <h1>Settings</h1>
+    <p class="sub">Every control here is wired directly to the browser core.</p>
+
+    <div class="card">
+      <h2>Appearance</h2>
+      <div class="row">
+        <div><div class="label">Theme</div><div class="desc">Applies instantly to the whole browser.</div></div>
+        <div class="right">
+          <select id="theme">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Search</h2>
+      <div class="row">
+        <div><div class="label">Default search engine</div><div class="desc">Used in the address bar and new-tab search.</div></div>
+        <div class="right">
+          <select id="search_engine">
+            <option value="duckduckgo">DuckDuckGo</option>
+            <option value="google">Google</option>
+            <option value="bing">Bing</option>
+            <option value="brave">Brave Search</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" id="row-custom-search" style="display:none">
+        <div><div class="label">Custom search URL</div><div class="desc">Use <code class="inline">{q}</code> as the query placeholder.</div></div>
+        <div class="right"><input type="text" id="custom_search_url" placeholder="https://searx.example/search?q={q}" style="width:260px"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Content filtering</h2>
+      <div id="lists"></div>
+      <hr class="soft">
+      <div class="row">
+        <div><div class="label">Custom filters</div><div class="desc">ABP/uBlock syntax, e.g. <code class="inline">||ads.example.com^</code></div></div>
+        <div class="right">
+          <input type="text" id="custom-filter" placeholder="||ads.example.com^" style="width:220px">
+          <button class="k primary" id="add-filter">Add</button>
+        </div>
+      </div>
+      <ul class="entry-list" id="custom-filters"></ul>
+      <div class="row">
+        <div><div class="label">Filter lists</div><div class="desc" id="filter-status">—</div></div>
+        <div class="right"><button class="k" id="update-lists">Update now</button></div>
+      </div>
+      <div class="row">
+        <div><div class="label">Test a URL</div><div class="desc">Check how the engine treats a given URL.</div></div>
+        <div class="right">
+          <input type="text" id="test-url" placeholder="https://ads.example.com/x.js" style="width:220px">
+          <button class="k" id="test-url-btn">Test</button>
+        </div>
+      </div>
+      <pre id="test-url-result" style="display:none;color:var(--accent);font-size:12.5px"></pre>
+    </div>
+
+    <div class="card">
+      <h2>Privacy &amp; security</h2>
+      <div class="row">
+        <div><div class="label">Fingerprint protection</div><div class="desc">Randomizes canvas, WebGL, audio and font readbacks.</div></div>
+        <div class="right">
+          <select id="fingerprint_protection">
+            <option value="standard">Standard</option>
+            <option value="strict">Strict</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div><div class="label">Block third-party cookies</div><div class="desc">Applies engine-wide.</div></div>
+        <label class="toggle"><input type="checkbox" id="block_third_party_cookies"><span class="track"></span></label>
+      </div>
+      <div class="row">
+        <div><div class="label">WebRTC</div><div class="desc">Off by default to prevent IP leaks.</div></div>
+        <label class="toggle"><input type="checkbox" id="webrtc_enabled"><span class="track"></span></label>
+      </div>
+      <div class="row">
+        <div><div class="label">Popup blocking</div><div class="desc">Unrequested window.open targets.</div></div>
+        <div class="right">
+          <select id="popups">
+            <option value="block">Block</option>
+            <option value="allow">Allow</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div><div class="label">Password manager</div><div class="desc">Store credentials encrypted in the system keyring.</div></div>
+        <label class="toggle"><input type="checkbox" id="vault_enabled"><span class="track"></span></label>
+      </div>
+      <ul class="entry-list" id="vault-list"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Downloads</h2>
+      <div class="row">
+        <div><div class="label">Always ask where to save</div></div>
+        <label class="toggle"><input type="checkbox" id="ask_download_location"><span class="track"></span></label>
+      </div>
+      <div class="row">
+        <div><div class="label">Download directory</div></div>
+        <div class="right"><input type="text" id="downloads_dir" style="width:260px"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Browsing</h2>
+      <div class="row">
+        <div><div class="label">Restore session on start</div><div class="desc">Also recovers tabs after a crash.</div></div>
+        <label class="toggle"><input type="checkbox" id="restore_session"><span class="track"></span></label>
+      </div>
+      <div class="row">
+        <div><div class="label">Mouse gestures</div><div class="desc">Right-drag: back / forward / reload.</div></div>
+        <label class="toggle"><input type="checkbox" id="gestures"><span class="track"></span></label>
+      </div>
+      <div class="row">
+        <div><div class="label">Discard inactive tabs</div><div class="desc">Frees memory from background tabs.</div></div>
+        <label class="toggle"><input type="checkbox" id="discard_inactive_tabs"><span class="track"></span></label>
+      </div>
+      <div class="row">
+        <div><div class="label">Hardware acceleration</div><div class="desc">Disable if your GPU misbehaves (restart needed).</div></div>
+        <label class="toggle"><input type="checkbox" id="hardware_accel"><span class="track"></span></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Clear browsing data</h2>
+      <div class="right" style="justify-content:flex-start;flex-wrap:wrap">
+        <button class="k danger" id="clear-history">Clear history</button>
+        <button class="k danger" id="clear-cookies">Clear cookies</button>
+        <button class="k danger" id="clear-permissions">Reset permissions</button>
+        <button class="k danger" id="clear-all">Clear everything</button>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="kestrel://assets/app.js"></script>
+<script>
+window.pageRender = function (state) {
+  if (!state) return;
+  var s = state.settings;
+  document.getElementById("theme").value = s.theme;
+  document.getElementById("search_engine").value = s.search_engine;
+  document.getElementById("custom_search_url").value = s.custom_search_url || "";
+  document.getElementById("row-custom-search").style.display = s.search_engine === "custom" ? "flex" : "none";
+  document.getElementById("fingerprint_protection").value = s.fingerprint_protection;
+  document.getElementById("popups").value = s.popups;
+  document.getElementById("downloads_dir").value = s.downloads_dir;
+  ["block_third_party_cookies","webrtc_enabled","vault_enabled","ask_download_location",
+   "restore_session","gestures","discard_inactive_tabs","hardware_accel"].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (el) el.checked = !!s[k];
+  });
+
+  // lists
+  var lists = document.getElementById("lists");
+  lists.innerHTML = "";
+  (state.shield.statuses || []).forEach(function (st) {
+    var row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = '<div><div class="label">' + st.title + '</div><div class="desc">' +
+      (st.enabled ? st.rules.toLocaleString() + " rules" : "disabled") +
+      (st.cached ? " · cached" : " · seed") + (st.stale ? ' <span class="pill warn">update available</span>' : "") +
+      '</div></div>';
+    var t = document.createElement("label");
+    t.className = "toggle";
+    t.innerHTML = '<input type="checkbox" ' + (st.enabled ? "checked" : "") + '><span class="track"></span>';
+    t.querySelector("input").addEventListener("change", function (ev) {
+      __kestrel.send("set-list", { key: st.key, value: ev.target.checked });
+    });
+    row.appendChild(t);
+    lists.appendChild(row);
+  });
+  var sh = state.shield;
+  document.getElementById("filter-status").textContent =
+    sh.filters_active
+      ? sh.network_rules.toLocaleString() + " network rules compiled · " + sh.tracker_hosts.toLocaleString() + " tracker domains"
+      : "compiling…";
+
+  // custom filters
+  var cf = document.getElementById("custom-filters");
+  cf.innerHTML = "";
+  (s.custom_filters || []).forEach(function (r) {
+    var li = document.createElement("li");
+    li.innerHTML = '<span class="favicon">#</span><span class="meta"><span class="t">' + r.replace(/</g, "&lt;") + '</span></span>';
+    var del = document.createElement("button");
+    del.className = "iconbtn"; del.textContent = "✕";
+    del.addEventListener("click", function () { __kestrel.send("remove-custom-filter", { value: r }); });
+    li.appendChild(del);
+    cf.appendChild(li);
+  });
+
+  // vault
+  var vl = document.getElementById("vault-list");
+  vl.innerHTML = "";
+  (state.vault || []).forEach(function (e) {
+    var li = document.createElement("li");
+    li.innerHTML = '<span class="favicon">•</span><span class="meta"><span class="t">' + e.origin + '</span><span class="s">' + e.username + '</span></span>';
+    var del = document.createElement("button");
+    del.className = "iconbtn"; del.textContent = "✕";
+    del.addEventListener("click", function () { __kestrel.send("delete-vault-entry", { value: e.origin }); });
+    li.appendChild(del);
+    vl.appendChild(li);
+  });
+};
+
+document.getElementById("theme").addEventListener("change", function (e) { __kestrel.send("set-setting", { key: "theme", value: e.target.value }); });
+document.getElementById("search_engine").addEventListener("change", function (e) { __kestrel.send("set-setting", { key: "search_engine", value: e.target.value }); });
+document.getElementById("custom_search_url").addEventListener("change", function (e) { __kestrel.send("set-setting", { key: "custom_search_url", value: e.target.value }); });
+document.getElementById("fingerprint_protection").addEventListener("change", function (e) { __kestrel.send("set-setting", { key: "fingerprint_protection", value: e.target.value }); });
+document.getElementById("popups").addEventListener("change", function (e) { __kestrel.send("set-setting", { key: "popups", value: e.target.value }); });
+document.getElementById("downloads_dir").addEventListener("change", function (e) { __kestrel.send("set-setting", { key: "downloads_dir", value: e.target.value }); });
+["block_third_party_cookies","webrtc_enabled","vault_enabled","ask_download_location",
+ "restore_session","gestures","discard_inactive_tabs","hardware_accel"].forEach(function (k) {
+  var el = document.getElementById(k);
+  if (el) el.addEventListener("change", function () { __kestrel.send("set-setting", { key: k, value: el.checked }); });
+});
+document.getElementById("add-filter").addEventListener("click", function () {
+  var v = document.getElementById("custom-filter").value.trim();
+  if (v) { __kestrel.send("add-custom-filter", { value: v }); document.getElementById("custom-filter").value = ""; }
+});
+document.getElementById("update-lists").addEventListener("click", function () { __kestrel.send("update-filters"); });
+document.getElementById("test-url-btn").addEventListener("click", function () {
+  var v = document.getElementById("test-url").value.trim();
+  if (v) __kestrel.send("test-url", { value: v });
+});
+document.getElementById("clear-history").addEventListener("click", function () { __kestrel.send("clear-data", { value: "history" }); });
+document.getElementById("clear-cookies").addEventListener("click", function () { __kestrel.send("clear-data", { value: "cookies" }); });
+document.getElementById("clear-permissions").addEventListener("click", function () { __kestrel.send("clear-data", { value: "permissions" }); });
+document.getElementById("clear-all").addEventListener("click", function () { __kestrel.send("clear-data", { value: "all" }); });
+</script>
+</body>
+</html>

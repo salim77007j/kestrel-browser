@@ -1,0 +1,15 @@
+Package: kestrel-browser
+Version: 0.1.0
+Section: web
+Priority: optional
+Architecture: amd64
+Depends: libgtk-4-1, libwebkitgtk-6.0-1, adwaita-icon-theme
+Maintainer: Kestrel Team <salim77007j@users.noreply.github.com>
+Homepage: https://github.com/salim77007j/kestrel-browser
+Description: Fast, private, lightweight web browser
+ Kestrel is an independent browser with a memory-safe Rust core, GTK4 UI and
+ WebKitGTK rendering. It ships with network-level ad & tracker blocking
+ (compiled content filters), cosmetic filtering, anti-fingerprinting,
+ third-party cookie control, WebRTC protection, a private mode, an OS-keyring
+ password vault and full tab/session management — with a tiny resource
+ footprint.

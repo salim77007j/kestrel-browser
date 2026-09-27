@@ -1,0 +1,110 @@
+<!doctype html>
+<html data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>Privacy Dashboard — Kestrel</title>
+  <link rel="stylesheet" href="kestrel://assets/app.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">K</span> Kestrel</div>
+    <nav>
+      <a href="kestrel://newtab">New Tab</a>
+      <a href="kestrel://settings">Settings</a>
+      <a href="kestrel://privacy" class="active">Privacy Dashboard</a>
+      <a href="kestrel://bookmarks">Bookmarks</a>
+      <a href="kestrel://history">History</a>
+      <a href="kestrel://downloads">Downloads</a>
+    </nav>
+  </aside>
+  <main class="main">
+    <h1>Privacy Dashboard</h1>
+    <p class="sub">Live protection status — every number here comes from the engine itself.</p>
+
+    <div class="stats">
+      <div class="stat"><div class="num" id="stat-rules">—</div><div class="lbl">Compiled network rules</div></div>
+      <div class="stat"><div class="num" id="stat-hosts">—</div><div class="lbl">Tracker domains covered</div></div>
+      <div class="stat"><div class="num" id="stat-blocked">—</div><div class="lbl">Cosmetic elements hidden (lifetime)</div></div>
+      <div class="stat"><div class="num" id="stat-mode">—</div><div class="lbl">Fingerprint protection</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Content blocker engine</h2>
+      <div class="row">
+        <div><div class="label">Compiled WebKit content filter</div><div class="desc">Network-level blocking in the WebKit network process.</div></div>
+        <span class="pill" id="pill-compiled">—</span>
+      </div>
+      <div class="row">
+        <div><div class="label">Cosmetic filtering</div><div class="desc">Per-page CSS hiding + scriptlets via adblock-rust.</div></div>
+        <span class="pill" id="pill-cosmetic">Active</span>
+      </div>
+      <div class="row">
+        <div><div class="label">Fingerprint randomization</div><div class="desc">Canvas · WebGL · Audio · Hardware (Strict adds fonts &amp; rects).</div></div>
+        <span class="pill" id="pill-fp">—</span>
+      </div>
+      <div class="row">
+        <div><div class="label">WebRTC</div><div class="desc">Disabled prevents local-IP leaks.</div></div>
+        <span class="pill" id="pill-webrtc">—</span>
+      </div>
+      <div class="row">
+        <div><div class="label">Third-party cookies</div><div class="desc">Engine-wide cookie policy.</div></div>
+        <span class="pill" id="pill-cookies">—</span>
+      </div>
+      <div class="row">
+        <div><div class="label">TLS policy</div><div class="desc">Invalid certificates are hard-blocked (fail-closed).</div></div>
+        <span class="pill">Fail-closed</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Filter lists</h2>
+      <ul class="entry-list" id="lists"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Quick actions</h2>
+      <div class="right" style="justify-content:flex-start">
+        <button class="k primary" id="update">Update filter lists</button>
+        <button class="k" onclick="location.href='kestrel://settings'">Open settings</button>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="kestrel://assets/app.js"></script>
+<script>
+window.pageRender = function (state) {
+  if (!state) return;
+  var sh = state.shield;
+  document.getElementById("stat-rules").textContent = sh.network_rules.toLocaleString();
+  document.getElementById("stat-hosts").textContent = sh.tracker_hosts.toLocaleString();
+  document.getElementById("stat-blocked").textContent = sh.lifetime_blocked.toLocaleString();
+  var fpNames = { standard: "Standard", strict: "Strict", off: "Off" };
+  document.getElementById("stat-mode").textContent = fpNames[state.settings.fingerprint_protection] || "—";
+
+  setPill("pill-compiled", sh.filters_active, "active", "compiling…", "muted");
+  setPill("pill-cosmetic", true, "active", "off", "muted");
+  setPill("pill-fp", state.settings.fingerprint_protection !== "off", "on", "off");
+  setPill("pill-webrtc", !state.settings.webrtc_enabled, "blocked", "allowed", "warn");
+  setPill("pill-cookies", state.settings.block_third_party_cookies, "blocked", "allowed", "warn");
+
+  var lists = document.getElementById("lists");
+  lists.innerHTML = "";
+  (sh.statuses || []).forEach(function (st) {
+    var li = document.createElement("li");
+    li.innerHTML = '<span class="favicon">≡</span><span class="meta"><span class="t">' + st.title +
+      '</span><span class="s">' + (st.enabled ? st.rules.toLocaleString() + " rules" : "disabled") +
+      (st.cached ? " · cached list" : " · bundled seed") + '</span></span>' +
+      '<span class="pill ' + (st.enabled ? "" : "muted") + '">' + (st.enabled ? "ON" : "OFF") + '</span>';
+    lists.appendChild(li);
+  });
+};
+function setPill(id, on, onText, offText, offClass) {
+  var el = document.getElementById(id);
+  el.className = "pill " + (on ? "" : (offClass || "muted"));
+  el.textContent = on ? onText : offText;
+}
+document.getElementById("update").addEventListener("click", function () { __kestrel.send("update-filters"); });
+</script>
+</body>
+</html>
