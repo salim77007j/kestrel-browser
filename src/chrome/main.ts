@@ -1,5 +1,6 @@
 import { invoke, listen, emit, windowMinimize, windowToggleMaximize, windowClose } from "../lib/api";
 import { icons } from "../lib/icons";
+import { brandIcon, appsIcon } from "../lib/brandicons";
 
 // ---------------------------------------------------------------------------
 // state
@@ -211,7 +212,7 @@ function renderBookmarksBar() {
 
   const apps = document.createElement("button");
   apps.className = "bm-item";
-  apps.innerHTML = `<span class="bm-icon">${icons.apps}</span><span class="bm-label">Apps</span>`;
+  apps.innerHTML = `<span class="bm-icon">${appsIcon(16)}</span><span class="bm-label">Apps</span>`;
   apps.title = "Open start page";
   apps.addEventListener("click", () => invoke("open_internal", { page: "newtab.html" }));
   bar.appendChild(apps);
@@ -219,8 +220,14 @@ function renderBookmarksBar() {
   for (const b of S.bookmarks.bar) {
     const el = document.createElement("button");
     el.className = "bm-item";
+    const brand = brandIcon(b.url, 16);
     const fav = S.favicons.get(hostOf(b.url));
-    el.innerHTML = `<span class="bm-icon">${fav ? `<img src="${fav}" style="width:16px;height:16px" />` : letterChipIcon(b.title)}</span><span class="bm-label">${escapeHtml(b.title)}</span>`;
+    const icon = brand
+      ? brand
+      : fav
+        ? `<img src="${fav}" style="width:16px;height:16px" />`
+        : letterChipIcon(b.title);
+    el.innerHTML = `<span class="bm-icon">${icon}</span><span class="bm-label">${escapeHtml(b.title)}</span>`;
     el.addEventListener("click", () => invoke("navigate_active", { input: b.url }));
     el.addEventListener("auxclick", (e) => {
       if (e.button === 1) invoke("create_tab", { url: b.url, background: true });
