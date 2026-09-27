@@ -163,6 +163,7 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
                 on_finished(state, &win2, &tab2, v);
             }
             _ => {}
+            }
         });
     }
 
