@@ -40,8 +40,12 @@ pub fn run(w: &Rc<BrowserWindow>, outdir: PathBuf) {
     let _ = (t1, t2, t3);
 
     let state = w.state.clone();
+    let w_weak = std::rc::Rc::downgrade(w);
+    let outdir_a = outdir.clone();
     glib::timeout_add_local(std::time::Duration::from_millis(4000), move || {
-        capture_all(&state, w, &outdir);
+        if let Some(w) = w_weak.upgrade() {
+            capture_all(&state, &w, &outdir_a);
+        }
         glib::ControlFlow::Break
     });
 

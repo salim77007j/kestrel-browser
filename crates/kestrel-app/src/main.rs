@@ -84,21 +84,19 @@ fn main() {
         .build();
 
     let state = state::AppState::new(settings);
-    app.connect_startup(glib::clone!(
-        #[weak]
-        state,
-        move |_| {
-            theme::apply(&state.settings.borrow().theme);
-            state.on_startup();
-        }
-    ));
+    {
+        let state2 = state.clone();
+        app.connect_startup(move |_| {
+            theme::apply(&state2.settings.borrow().theme);
+            state2.on_startup();
+        });
+    }
 
     let urls_cell = RefCell::new(urls.clone());
     let smoke_cell = RefCell::new(smoke_dir.clone());
-    app.connect_activate(glib::clone!(
-        #[weak]
-        state,
-        move |app| {
+    {
+        let state2 = state.clone();
+    app.connect_activate(move |app| {
             let w = window::BrowserWindow::new(app, &state);
             w.present();
             state.add_window(&w);
@@ -113,22 +111,21 @@ fn main() {
                 smoke::run(&w, dir);
             }
         }
-    ));
+    });
+    }
 
     // Additional instances hand their URLs to the primary instance.
-    app.connect_open(glib::clone!(
-        #[weak]
-        state,
-        move |_, files, _| {
+    {
+        let state2 = state.clone();
+        app.connect_open(move |_, files, _| {
             for f in files {
-                if let Some(uri) = f.uri() {
-                    if let Some(w) = state.main_window() {
-                        w.open_url_in_new_tab(&uri);
-                    }
+                let uri = f.uri().to_string();
+                if let Some(w) = state2.main_window() {
+                    w.open_url_in_new_tab(&uri);
                 }
             }
-        }
-    ));
+        });
+    }
 
     app.run();
 }

@@ -138,10 +138,12 @@ pub fn apply_settings(state: &Rc<AppState>, settings: &webkit::Settings) {
 }
 
 fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, webview: &WebView) {
+    let state_owned = state.clone();
     // --- load lifecycle ---
     {
         let win2 = std::rc::Rc::downgrade(win);
         let tab2 = tab.clone();
+        let state2 = state_owned.clone();
         webview.connect_load_changed(move |v, event| {
             let Some(win2) = win2.upgrade() else { return };
             match event {
@@ -154,7 +156,7 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
                 win2.reload_btn.set_visible(false);
             }
             LoadEvent::Committed => {
-                inject_cosmetic(state, v);
+                inject_cosmetic(&state2, v);
             }
             _ => {}
             LoadEvent::Finished => {
@@ -163,7 +165,7 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
                 win2.progress.set_visible(false);
                 win2.stop_btn.set_visible(false);
                 win2.reload_btn.set_visible(true);
-                on_finished(state, &win2, &tab2, v);
+                on_finished(&state2, &win2, &tab2, v);
             }
             _ => {}
             }
@@ -323,7 +325,7 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
 
     // --- permissions ---
     {
-        let state2 = state.clone();
+        let state2 = state_owned.clone();
         webview.connect_permission_request(move |_, request| {
             crate::perms::handle(&state2, request);
             true // decided by our handler
@@ -495,7 +497,7 @@ fn quick_confirm(msg: &str) -> bool {
         #[strong]
         tx,
         move |d, r| {
-            d.hide();
+            d.close();
             let _ = tx.send(r);
         }
     ));

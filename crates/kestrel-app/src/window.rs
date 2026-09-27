@@ -208,7 +208,7 @@ impl BrowserWindow {
 
         crate::menus::install(&w, &w.menu_btn);
         crate::actions::install(&w);
-        crate::window::wire_window_signals(&w, &newtab_btn, &min_btn, &max_btn, &close_btn, &back_btn, &fwd_btn, &reload_btn, &stop_btn, &home_btn, &downloads_btn);
+        crate::window::wire_window_signals(&w, &newtab_btn, &min_btn, &max_btn, &close_btn, &w.back_btn, &w.fwd_btn, &w.reload_btn, &w.stop_btn, &home_btn, &w.downloads_btn);
 
         w
     }
@@ -251,11 +251,11 @@ impl BrowserWindow {
         tab
     }
 
-    pub fn open_url_in_new_tab(&self, uri: &str) {
+    pub fn open_url_in_new_tab(self: &Rc<Self>, uri: &str) {
         self.new_tab(&crate::session::normalize_uri(uri), false, false);
     }
 
-    pub fn open_internal(&self, page: &'static str) {
+    pub fn open_internal(self: &Rc<Self>, page: &'static str) {
         // Reuse an existing internal tab for that page if present.
         {
             let tabs = self.tabs.borrow();
@@ -270,7 +270,7 @@ impl BrowserWindow {
         self.new_tab(&format!("kestrel://{page}"), false, false);
     }
 
-    pub fn load_active(&self, uri: &str) {
+    pub fn load_active(self: &Rc<Self>, uri: &str) {
         let active = self.current_tab();
         if let Some(tab) = active {
             tab.webview.load_uri(uri);
@@ -620,7 +620,7 @@ pub fn wire_window_signals(
                 let this_ptr = std::rc::Rc::as_ptr(&w2);
                 state2.windows.borrow_mut().retain(|x| !std::ptr::eq(std::rc::Rc::as_ptr(x), this_ptr));
             }
-            false // allow close
+            glib::Propagation::Proceed // allow close
         });
     }
 

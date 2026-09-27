@@ -23,6 +23,8 @@ pub fn install(w: &Rc<BrowserWindow>) {
     click.set_propagation_phase(gtk::PropagationPhase::Capture);
 
     {
+        let dragging = dragging.clone();
+        let suppress_menu = suppress_menu.clone();
         let w2 = std::rc::Rc::downgrade(w);
         click.connect_pressed(move |gesture, _, x, y| {
             let _ = w2;
@@ -34,6 +36,9 @@ pub fn install(w: &Rc<BrowserWindow>) {
         });
     }
 
+    {
+        let dragging = dragging.clone();
+        let suppress_menu = suppress_menu.clone();
     click.connect_released(move |gesture, _, _, _| {
         if dragging.get() {
             suppress_menu.set(true);
@@ -41,13 +46,23 @@ pub fn install(w: &Rc<BrowserWindow>) {
         }
         dragging.set(false);
     });
+    }
     w.content_overlay.add_controller(click);
 
     // Drag tracking.
     let drag = gtk::GestureDrag::new();
     drag.set_button(3);
     drag.set_propagation_phase(gtk::PropagationPhase::Capture);
+    let dragging2 = dragging.clone();
+    let start_x2 = start_x.clone();
+    let start_y2 = start_y.clone();
+    {
+        let w2 = std::rc::Rc::downgrade(w);
     drag.connect_drag_update(move |_, ox, oy| {
+            let Some(w) = w2.upgrade() else { return };
+            let dragging = &dragging2;
+            let start_x = &start_x2;
+            let start_y = &start_y2;
             let dx = ox - start_x.get();
             let dy = oy - start_y.get();
             if dx.abs() > 80.0 && !dragging.get() {
@@ -75,6 +90,7 @@ pub fn install(w: &Rc<BrowserWindow>) {
                 }
             }
     });
+    }
     w.content_overlay.add_controller(drag);
 
     let _ = suppress_menu;
