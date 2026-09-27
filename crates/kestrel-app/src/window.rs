@@ -502,7 +502,6 @@ impl Deref for BrowserWindow {
     }
 }
 
-crate::impl_rc_downgrade!(BrowserWindow);
 
 /// Wire up window-level buttons and lifecycle.
 pub fn wire_window_signals(

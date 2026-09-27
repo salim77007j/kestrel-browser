@@ -151,4 +151,3 @@ impl FindBar {
     }
 }
 
-crate::impl_rc_downgrade!(FindBar);

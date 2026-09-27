@@ -13,7 +13,7 @@ pub fn install(w: &Rc<BrowserWindow>) {
 
     macro_rules! act {
         ($name:expr, $state:expr, $body:expr) => {{
-            let w: std::rc::Rc<BrowserWindow> = std::rc::Rc::downgrade($state);
+            let w: std::rc::Weak<BrowserWindow> = std::rc::Rc::downgrade($state);
             let action = gio_shim_simple_action($name, None::<&glib::VariantTy>);
             action.connect_activate(move |_, _| {
                 let Some(w) = w.upgrade() else { return };
