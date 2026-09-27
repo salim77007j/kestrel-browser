@@ -428,7 +428,7 @@ fn inject_cosmetic(state: &Rc<AppState>, v: &WebView) {
         let Ok(cosmetic) = rrx.try_recv() else { return glib::ControlFlow::Continue };
         let count = cosmetic.hide_css.len() as u64;
         if count == 0 && cosmetic.injected_script.is_empty() {
-            return;
+            return glib::ControlFlow::Break; // engine replied: nothing to inject
         }
         let mut js = String::new();
         if !cosmetic.hide_css.is_empty() {

@@ -3,8 +3,9 @@
 //!
 //! Threading model: GTK owns the UI thread. A dedicated *engine thread*
 //! owns the adblock engine (it is !Send, so it never crosses threads);
-//! filter-list IO happens on short-lived worker threads. All cross-thread
-//! traffic uses `async_channel`, whose receiver is awaited on the main loop.
+//! filter-list IO happens on short-lived worker threads. Worker→UI traffic
+//! uses a std mpsc channel polled by a 200 ms main-loop tick; UI→engine
+//! traffic uses `async_channel` with blocking sends on the caller thread.
 
 use crate::dl::DownloadCenter;
 use kestrel_privacy::lists::{ListId, ListManager, ListStatus};
@@ -65,7 +66,7 @@ pub struct AppState {
     pub list_statuses: RefCell<Vec<ListStatus>>,
     pub filter_compile_ok: Cell<bool>
     ,
-    tx: RefCell<Option<async_channel::Sender<WorkerMsg>>>,
+    tx: RefCell<Option<std::sync::mpsc::Sender<WorkerMsg>>>,
 }
 
 impl AppState {
@@ -315,7 +316,7 @@ impl AppState {
         std::thread::spawn(move || {
             let manager = ListManager::new(&lists_dir);
             let _ = manager.fetch_all(&ListId::ALL);
-            let _ = tx.send_blocking(WorkerMsg::ListsFetched);
+            let _ = tx.send(WorkerMsg::ListsFetched);
         });
     }
 
