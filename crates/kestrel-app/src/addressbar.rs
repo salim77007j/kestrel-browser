@@ -158,7 +158,7 @@ impl AddressBar {
             if !uri.is_empty() {
                 this5.navigate(&uri);
             }
-        }));
+        });
 
         // Shield button -> open privacy dashboard for this site.
         let this6 = std::rc::Rc::downgrade(self);
