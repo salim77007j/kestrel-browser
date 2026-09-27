@@ -99,9 +99,10 @@ impl AddressBar {
 
     fn wire(&self) {
         // Text changed -> refresh suggestions (debounced lightly).
-        let this2 = self.clone();
+        let this2 = std::rc::Rc::downgrade(self);
         self.entry
-            .connect_changed(glib::clone!(#[weak] this2, move |e| {
+            .connect_changed(move |e| {
+            let Some(this2) = this2.upgrade() else { return };
                 if this2.navigating.get() {
                     return;
                 }
@@ -111,18 +112,19 @@ impl AddressBar {
                 } else {
                     this2.refresh_suggestions(&text);
                 }
-            }));
+            });
 
         // Enter -> navigate or accept selected suggestion.
-        let this3 = self.clone();
-        self.entry.connect_activate(glib::clone!(#[weak] this3, move |e| {
+        let this3 = std::rc::Rc::downgrade(self);
+        self.entry.connect_activate(move |e| {
+            let Some(this3) = this3.upgrade() else { return };
             let selected = this3.selected_uri();
             let text = e.text().to_string();
             match selected {
                 Some(uri) => this3.navigate(&uri),
                 None => this3.navigate(&text),
             }
-        }));
+        });
 
         // Keyboard navigation inside the popover.
         let this4 = std::rc::Rc::downgrade(self);
@@ -148,8 +150,9 @@ impl AddressBar {
         self.entry.add_controller(key);
 
         // Row click -> navigate.
-        let this5 = self.clone();
-        self.list.connect_row_activated(glib::clone!(#[weak] this5, move |_, row| {
+        let this5 = std::rc::Rc::downgrade(self);
+        self.list.connect_row_activated(move |_, row| {
+            let Some(this5) = this5.upgrade() else { return };
             let name = row.widget_name();
             let uri = name.to_string();
             if !uri.is_empty() {
@@ -158,20 +161,22 @@ impl AddressBar {
         }));
 
         // Shield button -> open privacy dashboard for this site.
-        let this6 = self.clone();
-        self.shield_btn.connect_clicked(glib::clone!(#[weak] this6, move |_| {
+        let this6 = std::rc::Rc::downgrade(self);
+        self.shield_btn.connect_clicked(move |_| {
+            let Some(this6) = this6.upgrade() else { return };
             if let Some(w) = this6.state.main_window() {
                 w.open_internal("privacy");
             }
         }));
 
         // Star -> toggle bookmark.
-        let this7 = self.clone();
-        self.star.connect_clicked(glib::clone!(#[weak] this7, move |_| {
+        let this7 = std::rc::Rc::downgrade(self);
+        self.star.connect_clicked(move |_| {
+            let Some(this7) = this7.upgrade() else { return };
             if let Some(w) = this7.state.main_window() {
-                w.activate_action("bookmark-toggle", None);
+                w.activate_action("bookmark-toggle", None::<&glib::Variant>);
             }
-        }));
+        });
     }
 
     fn selected_uri(&self) -> Option<String> {
@@ -283,7 +288,7 @@ impl AddressBar {
             out.push(Suggestion {
                 kind: "HISTORY",
                 title: if h.title.is_empty() { h.url.clone() } else { h.title },
-                sub: h.url,
+                sub: h.url.clone(),
                 uri: h.url,
             });
         }
@@ -373,4 +378,3 @@ impl AddressBar {
     }
 }
 
-crate::impl_rc_downgrade!(AddressBar);

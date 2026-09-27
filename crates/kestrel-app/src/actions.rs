@@ -13,12 +13,13 @@ pub fn install(w: &Rc<BrowserWindow>) {
 
     macro_rules! act {
         ($name:expr, $state:expr, $body:expr) => {{
-            let w = $state.clone();
+            let w: std::rc::Rc<BrowserWindow> = std::rc::Rc::downgrade($state);
             let action = gio_shim_simple_action($name, None::<&glib::VariantTy>);
-            action.connect_activate(glib::clone!(#[weak] w, move |_, _| {
+            action.connect_activate(move |_, _| {
+                let Some(w) = w.upgrade() else { return };
                 let f: fn(&Rc<BrowserWindow>) = $body;
                 f(&w);
-            }));
+            });
             a.add_action(&action);
         }};
     }

@@ -229,7 +229,7 @@ impl AppState {
         self.windows.borrow_mut().push(w.clone());
     }
 
-    pub fn main_window(&self) -> Option<crate::window::BrowserWindow> {
+    pub fn main_window(&self) -> Option<Rc<crate::window::BrowserWindow>> {
         self.windows.borrow().first().cloned()
     }
 
@@ -342,5 +342,3 @@ impl AppState {
         let _ = self.settings.borrow().save();
     }
 }
-
-impl_rc_downgrade!(AppState);

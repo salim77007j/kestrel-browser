@@ -186,16 +186,16 @@ fn handle_command(state: &Rc<AppState>, win: &Rc<BrowserWindow>, raw: &str) {
         "set-list" => {
             let key = v["key"].as_str().unwrap_or("").to_string();
             let on = v["value"].as_bool().unwrap_or(true);
-            apply(&move |s| {
-                s.lists.insert(key, on);
+            apply(&|s| {
+                s.lists.insert(key.clone(), on);
             });
             state.reload_filters();
         }
         "add-custom-filter" => {
             let rule = v["value"].as_str().unwrap_or("").trim().to_string();
             if !rule.is_empty() {
-                apply(&move |s| {
-                    s.custom_filters.push(rule);
+                apply(&|s| {
+                    s.custom_filters.push(rule.clone());
                 });
                 state.reload_filters();
             }

@@ -219,7 +219,7 @@ impl BrowserWindow {
 
     // ---------------- tabs ----------------
 
-    pub fn new_tab(&self, uri: &str, background: bool, private: bool) -> Rc<Tab> {
+    pub fn new_tab(self: &Rc<Self>, uri: &str, background: bool, private: bool) -> Rc<Tab> {
         let tab = crate::webview::create_tab(self.state.clone(), self.clone(), uri, private);
         let idx = self.tabs.borrow().len();
         self.tabs.borrow_mut().push(tab.clone());
@@ -466,7 +466,7 @@ impl BrowserWindow {
         self.toast_label.set_text(text);
         self.toast.set_reveal_child(true);
         let toast = self.toast.clone();
-        glib::timeout_add_local(1800, move || {
+        glib::timeout_add_local(std::time::Duration::from_millis(1800), move || {
             toast.set_reveal_child(false);
             glib::ControlFlow::Break
         });
@@ -479,7 +479,7 @@ impl BrowserWindow {
             self.status.set_text(text);
             self.status.set_visible(true);
             let status = self.status.clone();
-            glib::timeout_add_local(1600, move || {
+            glib::timeout_add_local(std::time::Duration::from_millis(1600), move || {
                 status.set_visible(false);
                 glib::ControlFlow::Break
             });
@@ -526,24 +526,26 @@ pub fn wire_window_signals(
             }
         });
     }
-    min_btn.connect_clicked(glib::clone!(
-        #[weak]
-        w,
-        move |_| {
-            w.win.minimize();
-        }
-    ));
-    max_btn.connect_clicked(glib::clone!(
-        #[weak]
-        w,
-        move |_| {
-            if w.win.is_maximized() {
-                w.win.unmaximize();
-            } else {
-                w.win.maximize();
+    {
+        let w2 = std::rc::Rc::downgrade(w);
+        min_btn.connect_clicked(move |_| {
+            if let Some(w2) = w2.upgrade() {
+                w2.win.minimize();
             }
-        }
-    ));
+        });
+    }
+    {
+        let w2 = std::rc::Rc::downgrade(w);
+        max_btn.connect_clicked(move |_| {
+            if let Some(w2) = w2.upgrade() {
+                if w2.win.is_maximized() {
+                    w2.win.unmaximize();
+                } else {
+                    w2.win.maximize();
+                }
+            }
+        });
+    }
     {
         let w2 = std::rc::Rc::downgrade(w);
         close_btn.connect_clicked(move |_| {
@@ -552,56 +554,62 @@ pub fn wire_window_signals(
             }
         });
     }
-    back_btn.connect_clicked(glib::clone!(
-        #[weak]
-        w,
-        move |_| {
-            if let Some(t) = w.current_tab() {
-                t.webview.go_back();
+    {
+        let w2 = std::rc::Rc::downgrade(w);
+        back_btn.connect_clicked(move |_| {
+            if let Some(w2) = w2.upgrade() {
+                if let Some(t) = w2.current_tab() {
+                    t.webview.go_back();
+                }
             }
-        }
-    ));
-    fwd_btn.connect_clicked(glib::clone!(
-        #[weak]
-        w,
-        move |_| {
-            if let Some(t) = w.current_tab() {
-                t.webview.go_forward();
+        });
+    }
+    {
+        let w2 = std::rc::Rc::downgrade(w);
+        fwd_btn.connect_clicked(move |_| {
+            if let Some(w2) = w2.upgrade() {
+                if let Some(t) = w2.current_tab() {
+                    t.webview.go_forward();
+                }
             }
-        }
-    ));
-    reload_btn.connect_clicked(glib::clone!(
-        #[weak]
-        w,
-        move |_| {
-            if let Some(t) = w.current_tab() {
-                t.webview.reload();
+        });
+    }
+    {
+        let w2 = std::rc::Rc::downgrade(w);
+        reload_btn.connect_clicked(move |_| {
+            if let Some(w2) = w2.upgrade() {
+                if let Some(t) = w2.current_tab() {
+                    t.webview.reload();
+                }
             }
-        }
-    ));
-    stop_btn.connect_clicked(glib::clone!(
-        #[weak]
-        w,
-        move |_| {
-            if let Some(t) = w.current_tab() {
-                t.webview.stop_loading();
+        });
+    }
+    {
+        let w2 = std::rc::Rc::downgrade(w);
+        stop_btn.connect_clicked(move |_| {
+            if let Some(w2) = w2.upgrade() {
+                if let Some(t) = w2.current_tab() {
+                    t.webview.stop_loading();
+                }
             }
-        }
-    ));
-    home_btn.connect_clicked(glib::clone!(
-        #[weak]
-        w,
-        move |_| {
-            w.load_active("kestrel://newtab");
-        }
-    ));
-    downloads_btn.connect_clicked(glib::clone!(
-        #[weak]
-        w,
-        move |_| {
-            w.open_internal("downloads");
-        }
-    ));
+        });
+    }
+    {
+        let w2 = std::rc::Rc::downgrade(w);
+        home_btn.connect_clicked(move |_| {
+            if let Some(w2) = w2.upgrade() {
+                w2.load_active("kestrel://newtab");
+            }
+        });
+    }
+    {
+        let w2 = std::rc::Rc::downgrade(w);
+        downloads_btn.connect_clicked(move |_| {
+            if let Some(w2) = w2.upgrade() {
+                w2.open_internal("downloads");
+            }
+        });
+    }
 
     // Save session on close, drop the window from the registry, allow closing.
     {

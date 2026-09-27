@@ -3,6 +3,7 @@
 use crate::window::BrowserWindow;
 use gtk::prelude::*;
 use gtk::glib;
+use webkit::prelude::*;
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -21,40 +22,32 @@ pub fn install(w: &Rc<BrowserWindow>) {
     click.set_button(3);
     click.set_propagation_phase(gtk::PropagationPhase::Capture);
 
-    click.connect_pressed(glib::clone!(
-        #[weak]
-        w,
-        move |gesture, _, x, y| {
+    {
+        let w2 = std::rc::Rc::downgrade(w);
+        click.connect_pressed(move |gesture, _, x, y| {
+            let _ = w2;
             start_x.set(x);
             start_y.set(y);
             dragging.set(false);
             suppress_menu.set(false);
-            let _ = w;
             gesture.set_state(gtk::EventSequenceState::None);
-        }
-    ));
+        });
+    }
 
-    click.connect_released(glib::clone!(
-        #[weak]
-        w,
-        move |gesture, _, _, _| {
-            if dragging.get() {
-                suppress_menu.set(true);
-                gesture.set_state(gtk::EventSequenceState::Claimed);
-            }
-            dragging.set(false);
+    click.connect_released(move |gesture, _, _, _| {
+        if dragging.get() {
+            suppress_menu.set(true);
+            gesture.set_state(gtk::EventSequenceState::Claimed);
         }
-    ));
+        dragging.set(false);
+    });
     w.content_overlay.add_controller(click);
 
     // Drag tracking.
     let drag = gtk::GestureDrag::new();
     drag.set_button(3);
     drag.set_propagation_phase(gtk::PropagationPhase::Capture);
-    drag.connect_drag_update(glib::clone!(
-        #[weak]
-        w,
-        move |_, ox, oy| {
+    drag.connect_drag_update(move |_, ox, oy| {
             let dx = ox - start_x.get();
             let dy = oy - start_y.get();
             if dx.abs() > 80.0 && !dragging.get() {
@@ -81,9 +74,9 @@ pub fn install(w: &Rc<BrowserWindow>) {
                     }
                 }
             }
-        }
-    ));
+    });
     w.content_overlay.add_controller(drag);
 
     let _ = suppress_menu;
 }
+

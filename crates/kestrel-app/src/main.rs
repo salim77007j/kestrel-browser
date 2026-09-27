@@ -18,7 +18,6 @@ mod state;
 mod tab;
 mod theme;
 mod webview;
-mod wk;
 mod window;
 
 use std::cell::RefCell;

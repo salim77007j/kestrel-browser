@@ -24,10 +24,9 @@ impl Default for DownloadCenter {
 }
 
 pub fn install(state: &Rc<AppState>) {
-    state.session.connect_download_started(glib::clone!(
-        #[weak]
-        state,
-        move |_session, download| {
+    let state_weak = std::rc::Rc::downgrade(state);
+    state.session.connect_download_started(move |_session, download| {
+        let Some(state) = state_weak.upgrade() else { return };
             let uri = download
                 .request()
                 .and_then(|r| r.uri())
@@ -108,7 +107,7 @@ pub fn install(state: &Rc<AppState>) {
                 });
             }
         }
-    ));
+    );
 }
 
 fn suggested_filename(uri: &str) -> String {
