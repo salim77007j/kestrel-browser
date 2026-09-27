@@ -502,18 +502,7 @@ impl Deref for BrowserWindow {
     }
 }
 
-impl glib::clone::Downgrade for BrowserWindow {
-    type Weak = std::rc::Weak<BrowserWindow>;
-    fn downgrade(&self) -> Self::Weak {
-        std::rc::Weak::downgrade(self)
-    }
-}
-impl glib::clone::Upgrade for std::rc::Weak<BrowserWindow> {
-    type Strong = std::rc::Rc<BrowserWindow>;
-    fn upgrade(&self) -> Option<Self::Strong> {
-        std::rc::Weak::upgrade(self)
-    }
-}
+crate::impl_rc_downgrade!(BrowserWindow);
 
 /// Wire up window-level buttons and lifecycle.
 pub fn wire_window_signals(
@@ -616,7 +605,7 @@ pub fn wire_window_signals(
 
     // Save session on close, drop the window from the registry, allow closing.
     {
-        let w2 = std::rc::Rc::downgrade(&w);
+        let w2: std::rc::Weak<BrowserWindow> = std::rc::Rc::downgrade(&w);
         let state2 = w.state.clone();
         w.win.connect_close_request(move |_| {
             if let Some(w2) = w2.upgrade() {

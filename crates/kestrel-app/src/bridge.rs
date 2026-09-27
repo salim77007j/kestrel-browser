@@ -105,7 +105,7 @@ fn handle_form_message(state: &Rc<AppState>, raw: &str) {
         .modal(true)
         .title("Password manager — Kestrel")
         .secondary_text(if user.is_empty() {
-            "Stored encrypted in your system keyring."
+            "Stored encrypted in your system keyring.".to_string()
         } else {
             format!("Username: {user}\nStored encrypted in your system keyring.")
         })

@@ -125,9 +125,10 @@ impl AddressBar {
         }));
 
         // Keyboard navigation inside the popover.
-        let this4 = self.clone();
+        let this4 = std::rc::Rc::downgrade(self);
         let key = EventControllerKey::new();
-        key.connect_key_pressed(glib::clone!(#[weak] this4, @default-return glib::Propagation::Proceed, move |_, key, _, _| {
+        key.connect_key_pressed(move |_, key, _, _| {
+            let Some(this4) = this4.upgrade() else { return glib::Propagation::Proceed };
             match key {
                 gtk::gdk::Key::Down => {
                     this4.move_selection(1);
@@ -143,7 +144,7 @@ impl AddressBar {
                 }
                 _ => glib::Propagation::Proceed,
             }
-        }));
+        });
         self.entry.add_controller(key);
 
         // Row click -> navigate.
@@ -372,15 +373,4 @@ impl AddressBar {
     }
 }
 
-impl glib::clone::Downgrade for AddressBar {
-    type Weak = std::rc::Weak<AddressBar>;
-    fn downgrade(&self) -> Self::Weak {
-        std::rc::Weak::downgrade(self)
-    }
-}
-impl glib::clone::Upgrade for std::rc::Weak<AddressBar> {
-    type Strong = std::rc::Rc<AddressBar>;
-    fn upgrade(&self) -> Option<Self::Strong> {
-        std::rc::Weak::upgrade(self)
-    }
-}
+crate::impl_rc_downgrade!(AddressBar);

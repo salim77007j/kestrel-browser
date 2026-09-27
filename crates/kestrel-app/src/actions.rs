@@ -252,7 +252,7 @@ fn install_accelerators(w: &Rc<BrowserWindow>) {
 
     // Focus address bar
     app.set_accels_for_action("win.focus-address", &["<Primary>L"]);
-    let action = gio_shim_simple_action("focus-address", None::<&str>);
+    let action = gio_shim_simple_action("focus-address", None::<&glib::VariantTy>);
     let w2 = w.clone();
     action.connect_activate(move |_, _| {
         w2.address.entry.grab_focus();

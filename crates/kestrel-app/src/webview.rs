@@ -132,9 +132,9 @@ pub fn apply_settings(state: &Rc<AppState>, settings: &webkit::Settings) {
     settings.set_javascript_can_open_windows_automatically(false);
     settings.set_allow_modal_dialogs(true);
     settings.set_enable_fullscreen(true);
-    settings.set_user_agent(
+    settings.set_user_agent(Some(
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
-    );
+    ));
 }
 
 fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, webview: &WebView) {
@@ -214,7 +214,7 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
         webview.connect_decide_policy(move |_, decision, decision_type| {
             let Some(win2) = win2.upgrade() else {
                 decision.use_();
-                return glib::Propagation::Proceed;
+                return false;
             };
             match decision_type {
                 PolicyDecisionType::NavigationAction => {
@@ -240,11 +240,11 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
                         if !known && !uri.is_empty() {
                             crate::webview::open_external(&uri);
                             decision.ignore();
-                            return glib::Propagation::Stop;
+                            return true;
                         }
                     }
                     decision.use_();
-                    glib::Propagation::Proceed
+                    false
                 }
                 PolicyDecisionType::NewWindowAction => {
                     let (uri, user_gesture) = decision
@@ -271,15 +271,15 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
                         win2.new_tab(&normalize_uri(&uri), true, false);
                         decision.ignore();
                     }
-                    glib::Propagation::Stop
+                    true
                 }
                 PolicyDecisionType::Response => {
                     decision.use_();
-                    glib::Propagation::Proceed
+                    false
                 }
                 _ => {
                     decision.use_();
-                    glib::Propagation::Proceed
+                    false
                 }
             }
         });

@@ -40,14 +40,14 @@ pub fn run(w: &Rc<BrowserWindow>, outdir: PathBuf) {
     let _ = (t1, t2, t3);
 
     let state = w.state.clone();
-    glib::timeout_add_local(4000, move || {
+    glib::timeout_add_local(std::time::Duration::from_millis(4000), move || {
         capture_all(&state, w, &outdir);
         glib::ControlFlow::Break
     });
 
     // Hard deadline: exit with failure if we somehow hang.
     let outdir2 = outdir.clone();
-    glib::timeout_add_local(45_000, move || {
+    glib::timeout_add_local(std::time::Duration::from_millis(45_000), move || {
         let report = serde_json::json!({
             "status": "timeout",
             "dir": outdir2.to_string_lossy(),
@@ -111,7 +111,7 @@ fn capture_all(state: &Rc<AppState>, w: &Rc<BrowserWindow>, outdir: &Path) {
 
     // Leave the app running briefly for the external X-window capture,
     // then exit cleanly so CI can collect artifacts.
-    glib::timeout_add_local(2500, move || {
+    glib::timeout_add_local(std::time::Duration::from_millis(2500), move || {
         std::process::exit(0);
     });
 }

@@ -7,7 +7,6 @@
 //! traffic uses `async_channel`, whose receiver is awaited on the main loop.
 
 use crate::dl::DownloadCenter;
-use crate::wk::impl_rc_downgrade;
 use kestrel_privacy::lists::{ListId, ListManager, ListStatus};
 use kestrel_privacy::shield::Shield;
 use kestrel_privacy::{CosmeticResult, FingerprintMode};
@@ -15,6 +14,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use webkit::prelude::*;
 use webkit::{NetworkSession, UserContentFilter, WebContext};
 
@@ -61,7 +61,7 @@ pub struct AppState {
     pub session: NetworkSession,
     pub ephemeral: RefCell<Option<NetworkSession>>,
     pub downloads: DownloadCenter,
-    pub windows: RefCell<Vec<crate::window::BrowserWindow>>,
+    pub windows: RefCell<Vec<Rc<crate::window::BrowserWindow>>>,
     pub list_statuses: RefCell<Vec<ListStatus>>,
     pub filter_compile_ok: Cell<bool>
     ,
@@ -146,7 +146,7 @@ impl AppState {
         std::thread::Builder::new()
             .name("kestrel-engine".into())
             .spawn(move || {
-                let mut engine: Option<PrivacyEngine> = None;
+                let mut engine: Option<kestrel_privacy::PrivacyEngine> = None;
                 loop {
                     match erx.recv_blocking() {
                         Ok(EngineMsg::Rebuild { rules, statuses }) => {
@@ -225,7 +225,7 @@ impl AppState {
         self.save_settings();
     }
 
-    pub fn add_window(&self, w: &crate::window::BrowserWindow) {
+    pub fn add_window(&self, w: &Rc<crate::window::BrowserWindow>) {
         self.windows.borrow_mut().push(w.clone());
     }
 

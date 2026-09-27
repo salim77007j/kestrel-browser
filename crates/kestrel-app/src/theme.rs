@@ -16,7 +16,7 @@ pub fn apply(theme: &str) {
 
     let provider = gtk::CssProvider::new();
     let css = if dark { DARK_CSS } else { LIGHT_CSS };
-    provider.load_from_data(css.as_bytes());
+    provider.load_from_data(css);
 
     gtk::style_context_add_provider_for_display(
         &display,

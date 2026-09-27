@@ -46,7 +46,7 @@ impl FindBar {
         row.append(&close);
         revealer.set_child(Some(&row));
 
-        Rc::new_cyclic(|slot| {
+        Rc::new_cyclic(|slot: &std::rc::Weak<FindBar>| {
             let weak = slot.clone();
             entry.connect_activate(move |e| {
                 if let Some(s) = weak.upgrade() {
@@ -151,15 +151,4 @@ impl FindBar {
     }
 }
 
-impl glib::clone::Downgrade for FindBar {
-    type Weak = std::rc::Weak<FindBar>;
-    fn downgrade(&self) -> Self::Weak {
-        std::rc::Weak::downgrade(self)
-    }
-}
-impl glib::clone::Upgrade for std::rc::Weak<FindBar> {
-    type Strong = std::rc::Rc<FindBar>;
-    fn upgrade(&self) -> Option<Self::Strong> {
-        std::rc::Weak::upgrade(self)
-    }
-}
+crate::impl_rc_downgrade!(FindBar);
