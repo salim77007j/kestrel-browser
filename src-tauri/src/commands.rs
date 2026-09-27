@@ -932,10 +932,16 @@ pub async fn set_fullscreen(app: AppHandle) -> Result<bool> {
 }
 
 /// Single validated entry point for page-content events (keyboard
-/// shortcuts, gestures, find results, save-page chunks). Remote pages only
-/// have this + event emit, so everything is whitelisted here.
+/// shortcuts, gestures, find results, save-page chunks). Reachable from
+/// remote pages via the `page-event` Tauri event (capability grants ONLY
+/// `core:event:allow-emit`) and from local pages via the command.
 #[tauri::command]
 pub fn page_event(app: AppHandle, event: Value) -> Result<()> {
+    handle_page_event(&app, event);
+    Ok(())
+}
+
+pub fn handle_page_event(app: &AppHandle, event: Value) {
     let t = event["t"].as_str().unwrap_or("");
     match t {
         "key" => {
@@ -943,7 +949,7 @@ pub fn page_event(app: AppHandle, event: Value) -> Result<()> {
         }
         "gesture" => {
             let name = event["name"].as_str().unwrap_or("");
-            let s = state(&app);
+            let s = app.state::<AppState>();
             let active = s.active_tab.lock().unwrap().clone();
             match name {
                 "back" => {
@@ -990,11 +996,10 @@ pub fn page_event(app: AppHandle, event: Value) -> Result<()> {
             let _ = app.emit_to(CHROME_LABEL, "find-result", json!({"count": count, "index": index}));
         }
         "save-start" | "save-chunk" | "save-end" | "save-error" => {
-            handle_save_chunk(&app, event);
+            handle_save_chunk(app, event);
         }
         _ => {}
     }
-    Ok(())
 }
 
 fn handle_save_chunk(app: &AppHandle, event: Value) {

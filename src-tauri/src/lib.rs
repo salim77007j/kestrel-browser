@@ -25,6 +25,19 @@ pub fn run() {
             let state = AppState::bootstrap(&app)?;
             app.manage(state);
 
+            // Page-content events (shortcuts, gestures, find, save-page)
+            // arrive from any webview — remote pages may only EMIT this
+            // event (capability `page-bridge`); every payload is validated
+            // in commands::handle_page_event.
+            {
+                let app2 = app.clone();
+                app.listen_any("page-event", move |e| {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(e.payload()) {
+                        commands::handle_page_event(&app2, v);
+                    }
+                });
+            }
+
             // Build the privacy engine in the background; the shell works
             // fail-open until it is ready (usually well under a second on
             // modern hardware for the bundled seed lists).

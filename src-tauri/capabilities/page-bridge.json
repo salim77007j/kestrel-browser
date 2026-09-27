@@ -7,7 +7,6 @@
     "urls": ["https://*", "http://*"]
   },
   "permissions": [
-    "core:event:allow-emit",
-    "page_event"
+    "core:event:allow-emit"
   ]
 }
