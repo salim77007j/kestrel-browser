@@ -218,8 +218,9 @@ pub fn allow_navigation(app: &AppHandle, tab_id: &str, url: &Url) -> bool {
                 };
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(30));
+                    let app3 = app2.clone();
                     let _ = app2.run_on_main_thread(move || {
-                        if let Some(wv) = app2.get_webview(&id2) {
+                        if let Some(wv) = app3.get_webview(&id2) {
                             let page = format!(
                                 "pages/blocked.html?u={}&reason={}",
                                 urlencode_component(&u),

@@ -11,7 +11,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 type Result<T> = std::result::Result<T, String>;
 
-fn state<'a>(app: &AppHandle) -> tauri::State<'a, AppState> {
+fn state<'a>(app: &'a AppHandle) -> tauri::State<'a, AppState> {
     app.state::<AppState>()
 }
 
@@ -497,7 +497,8 @@ pub fn update_settings(app: AppHandle, patch: Value) -> Result<Value> {
         // apply immediate effects
         apply_setting_effects(&app, &cloned, &patch);
     }
-    Ok(serde_json::to_value(&*s.settings.read().unwrap()).unwrap_or(json!({})))
+    let snapshot = { s.settings.read().unwrap().clone() };
+    Ok(serde_json::to_value(&snapshot).unwrap_or(json!({})))
 }
 
 fn apply_setting_effects(app: &AppHandle, _settings: &kestrel_data::Settings, patch: &Value) {
@@ -666,11 +667,13 @@ pub async fn save_page(app: AppHandle) -> Result<String> {
         return Err("no webview".into());
     }
     // stash the target path; chunks arrive via page-event
-    state(&app)
-        .pending_permissions
-        .lock()
-        .unwrap()
-        .insert(format!("savepage:{id}"), (path.to_string_lossy().to_string(), String::new()));
+    {
+        let s = state(&app);
+        s.pending_permissions
+            .lock()
+            .unwrap()
+            .insert(format!("savepage:{id}"), (path.to_string_lossy().to_string(), String::new()));
+    }
     Ok(path.to_string_lossy().to_string())
 }
 
@@ -771,7 +774,8 @@ pub fn add_shortcut(app: AppHandle, title: String, url: String) -> Result<()> {
 #[tauri::command]
 pub fn get_shortcuts(app: AppHandle) -> Value {
     let s = state(&app);
-    serde_json::to_value(s.shortcuts.lock().unwrap().list().to_vec()).unwrap_or(json!([]))
+    let items = { s.shortcuts.lock().unwrap().list().to_vec() };
+    serde_json::to_value(items).unwrap_or(json!([]))
 }
 
 /// Navigate the active tab to an internal page (new tab as fallback).

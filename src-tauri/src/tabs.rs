@@ -213,8 +213,9 @@ pub fn new_tab(
         let id2 = id.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(150));
+            let app3 = app2.clone();
             let _ = app2.run_on_main_thread(move || {
-                if let Some(wv) = app2.get_webview(&id2) {
+                if let Some(wv) = app3.get_webview(&id2) {
                     if let Ok(parsed) = normalize_url(&u) {
                         let _ = wv.navigate(parsed);
                     }
@@ -318,8 +319,9 @@ pub fn tab_webview_builder(app: &AppHandle, id: &str) -> WebviewBuilder<tauri::W
             let appc = app6.clone();
             let u = url.to_string();
             std::thread::spawn(move || {
+                let appd = appc.clone();
                 let _ = appc.run_on_main_thread(move || {
-                    let _ = new_tab(&appc, Some(u.clone()), false, None);
+                    let _ = new_tab(&appd, Some(u.clone()), false, None);
                 });
             });
             tauri::webview::NewWindowResponse::Deny

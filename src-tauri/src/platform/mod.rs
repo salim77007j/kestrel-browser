@@ -7,7 +7,7 @@
 #[cfg(target_os = "windows")]
 pub mod windows_impl {
     use tauri::Webview;
-    use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2, ICoreWebView2_4};
+    use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2, ICoreWebView2_8};
     use windows::core::Interface;
     use windows::core::BOOL;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -58,11 +58,11 @@ pub mod windows_impl {
         })
     }
 
-    /// Mute a tab through ICoreWebView2_4::SetIsMuted.
+    /// Mute a tab through ICoreWebView2_8::SetIsMuted.
     pub fn set_muted(webview: &Webview<tauri::Wry>, muted: bool) -> bool {
         with_core(webview, |core| {
-            match core.cast::<ICoreWebView2_4>() {
-                Ok(core4) => unsafe { core4.SetIsMuted(muted.into()).is_ok() },
+            match core.cast::<ICoreWebView2_8>() {
+                Ok(core8) => unsafe { core8.SetIsMuted(muted).is_ok() },
                 Err(_) => false,
             }
         })

@@ -153,47 +153,65 @@ fn extract_hosts(text: &str) -> HashSet<String> {
 /// Build the engine in a background thread and swap the client in when ready.
 pub fn spawn_engine_build(app: AppHandle) {
     std::thread::spawn(move || {
-        build_and_swap(&app);
+        let _ = build_and_swap(&app);
     });
 }
 
-pub fn build_and_swap(app: &AppHandle) {
+pub fn build_and_swap(app: &AppHandle) -> String {
     let state = app.state::<AppState>();
     let (rules, trackers) = compose_rules(&state);
-    match PrivacyEngine::from_rules(&rules) {
-        Ok(engine) => {
-            let count = engine.rule_count();
-            let (tx, rx) = channel::<Job>();
-            std::thread::spawn(move || {
-                // the engine lives on THIS thread only
-                while let Ok(job) = rx.recv() {
-                    match job {
-                        Job::Block { url, source, rtype, resp } => {
-                            let _ = resp.send(engine.should_block(&url, &source, rtype));
-                        }
-                        Job::Cosmetic { url, resp } => {
-                            let _ = resp.send(engine.cosmetic(&url));
-                        }
-                    }
+    let (tx, rx) = channel::<Job>();
+    let (done_tx, done_rx) = channel::<Result<usize, String>>();
+    // The engine holds Rc internally and must live on ONE thread: it is
+    // created inside the actor thread and never crosses boundaries. Jobs
+    // queue in the channel while the engine is being built (fail-open via
+    // client-side timeouts).
+    std::thread::spawn(move || {
+        let engine = match PrivacyEngine::from_rules(&rules) {
+            Ok(e) => e,
+            Err(e) => {
+                let _ = done_tx.send(Err(e.to_string()));
+                return;
+            }
+        };
+        let count = engine.rule_count();
+        let _ = done_tx.send(Ok(count));
+        while let Ok(job) = rx.recv() {
+            match job {
+                Job::Block { url, source, rtype, resp } => {
+                    let _ = resp.send(engine.should_block(&url, &source, rtype));
                 }
-            });
-            *state.engine.write().unwrap() = Some(PrivacyClient { tx });
-            *state.tracker_hosts.write().unwrap() = Arc::new(trackers);
+                Job::Cosmetic { url, resp } => {
+                    let _ = resp.send(engine.cosmetic(&url));
+                }
+            }
+        }
+    });
+    *state.engine.write().unwrap() = Some(PrivacyClient { tx });
+    *state.tracker_hosts.write().unwrap() = Arc::new(trackers);
+    // wait for the build result to update counters / notify the UI
+    let report = match done_rx.recv_timeout(Duration::from_secs(120)) {
+        Ok(Ok(count)) => {
+            state.engine_rules.store(count, std::sync::atomic::Ordering::SeqCst);
             state.engine_ready.store(true, std::sync::atomic::Ordering::SeqCst);
             let _ = app.emit_to(
                 crate::state::CHROME_LABEL,
                 "engine-ready",
                 json!({"rules": count}),
             );
+            format!("{count} rules")
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             let _ = app.emit_to(
                 crate::state::CHROME_LABEL,
                 "toast",
                 json!({"level": "error", "text": format!("Ad-block engine failed to build: {e}")}),
             );
+            format!("build failed: {e}")
         }
-    }
+        Err(_) => String::from("build timed out"),
+    };
+    report
 }
 
 /// Fetch the latest community lists and rebuild the engine.
