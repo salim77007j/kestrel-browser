@@ -1,9 +1,9 @@
 //! Address bar: security indicator, shield badge, star, suggestions popover.
 
 use crate::state::AppState;
+use gtk::glib;
 use gtk::prelude::*;
-use gtk::glib::prelude::*;
-use gtk::{glib, Entry, EventControllerKey, Popover, ListBox, ListBoxRow};
+use gtk::{Entry, EventControllerKey, ListBox, ListBoxRow, Popover};
 use std::rc::Rc;
 
 pub struct AddressBar {
@@ -97,12 +97,12 @@ impl AddressBar {
         this
     }
 
-    fn wire(&self) {
-        // Text changed -> refresh suggestions (debounced lightly).
-        let this2 = std::rc::Rc::downgrade(self);
-        self.entry
-            .connect_changed(move |e| {
-            let Some(this2) = this2.upgrade() else { return };
+    fn wire(self: &Rc<Self>) {
+        // Text changed -> refresh suggestions.
+        {
+            let this2 = Rc::downgrade(self);
+            self.entry.connect_changed(move |e| {
+                let Some(this2) = this2.upgrade() else { return };
                 if this2.navigating.get() {
                     return;
                 }
@@ -113,70 +113,83 @@ impl AddressBar {
                     this2.refresh_suggestions(&text);
                 }
             });
+        }
 
         // Enter -> navigate or accept selected suggestion.
-        let this3 = std::rc::Rc::downgrade(self);
-        self.entry.connect_activate(move |e| {
-            let Some(this3) = this3.upgrade() else { return };
-            let selected = this3.selected_uri();
-            let text = e.text().to_string();
-            match selected {
-                Some(uri) => this3.navigate(&uri),
-                None => this3.navigate(&text),
-            }
-        });
+        {
+            let this3 = Rc::downgrade(self);
+            self.entry.connect_activate(move |e| {
+                let Some(this3) = this3.upgrade() else { return };
+                let selected = this3.selected_uri();
+                let text = e.text().to_string();
+                match selected {
+                    Some(uri) => this3.navigate(&uri),
+                    None => this3.navigate(&text),
+                }
+            });
+        }
 
         // Keyboard navigation inside the popover.
-        let this4 = std::rc::Rc::downgrade(self);
-        let key = EventControllerKey::new();
-        key.connect_key_pressed(move |_, key, _, _| {
-            let Some(this4) = this4.upgrade() else { return glib::Propagation::Proceed };
-            match key {
-                gtk::gdk::Key::Down => {
-                    this4.move_selection(1);
-                    glib::Propagation::Stop
+        {
+            let this4 = Rc::downgrade(self);
+            let key = EventControllerKey::new();
+            key.connect_key_pressed(move |_, key, _, _| {
+                let Some(this4) = this4.upgrade() else {
+                    return glib::Propagation::Proceed;
+                };
+                match key {
+                    gtk::gdk::Key::Down => {
+                        this4.move_selection(1);
+                        glib::Propagation::Stop
+                    }
+                    gtk::gdk::Key::Up => {
+                        this4.move_selection(-1);
+                        glib::Propagation::Stop
+                    }
+                    gtk::gdk::Key::Escape => {
+                        this4.popover.popdown();
+                        glib::Propagation::Stop
+                    }
+                    _ => glib::Propagation::Proceed,
                 }
-                gtk::gdk::Key::Up => {
-                    this4.move_selection(-1);
-                    glib::Propagation::Stop
-                }
-                gtk::gdk::Key::Escape => {
-                    this4.popover.popdown();
-                    glib::Propagation::Stop
-                }
-                _ => glib::Propagation::Proceed,
-            }
-        });
-        self.entry.add_controller(key);
+            });
+            self.entry.add_controller(key);
+        }
 
         // Row click -> navigate.
-        let this5 = std::rc::Rc::downgrade(self);
-        self.list.connect_row_activated(move |_, row| {
-            let Some(this5) = this5.upgrade() else { return };
-            let name = row.widget_name();
-            let uri = name.to_string();
-            if !uri.is_empty() {
-                this5.navigate(&uri);
-            }
-        });
+        {
+            let this5 = Rc::downgrade(self);
+            self.list.connect_row_activated(move |_, row| {
+                let Some(this5) = this5.upgrade() else { return };
+                let name = row.widget_name();
+                let uri = name.to_string();
+                if !uri.is_empty() {
+                    this5.navigate(&uri);
+                }
+            });
+        }
 
-        // Shield button -> open privacy dashboard for this site.
-        let this6 = std::rc::Rc::downgrade(self);
-        self.shield_btn.connect_clicked(move |_| {
-            let Some(this6) = this6.upgrade() else { return };
-            if let Some(w) = this6.state.main_window() {
-                w.open_internal("privacy");
-            }
-        }));
+        // Shield button -> open privacy dashboard.
+        {
+            let this6 = Rc::downgrade(self);
+            self.shield_btn.connect_clicked(move |_| {
+                let Some(this6) = this6.upgrade() else { return };
+                if let Some(w) = this6.state.main_window() {
+                    w.open_internal("privacy");
+                }
+            });
+        }
 
         // Star -> toggle bookmark.
-        let this7 = std::rc::Rc::downgrade(self);
-        self.star.connect_clicked(move |_| {
-            let Some(this7) = this7.upgrade() else { return };
-            if let Some(w) = this7.state.main_window() {
-                w.activate_action("bookmark-toggle", None::<&glib::Variant>);
-            }
-        });
+        {
+            let this7 = Rc::downgrade(self);
+            self.star.connect_clicked(move |_| {
+                let Some(this7) = this7.upgrade() else { return };
+                if let Some(w) = this7.state.main_window() {
+                    w.win.activate_action("bookmark-toggle", None::<&glib::Variant>);
+                }
+            });
+        }
     }
 
     fn selected_uri(&self) -> Option<String> {
@@ -260,7 +273,7 @@ impl AddressBar {
             });
         }
 
-        // 2) Bookmarks
+        // 2) Bookmarks + 3) History
         let db = self.state.db.borrow();
         for bm in kestrel_data::bookmarks::search(&db, t, 3) {
             if out.len() >= 6 {
@@ -276,8 +289,6 @@ impl AddressBar {
                 uri: bm.url,
             });
         }
-
-        // 3) History
         for h in kestrel_data::history::search(&db, t, 3) {
             if out.len() >= 6 {
                 break;
@@ -293,7 +304,7 @@ impl AddressBar {
             });
         }
 
-        // 4) Search engine (always last fallback + present alongside)
+        // 4) Search engine fallback
         if out.is_empty() || !looks_like_url {
             let se = self.state.settings.borrow().search_url(t);
             out.push(Suggestion {
@@ -338,7 +349,8 @@ impl AddressBar {
 
     pub fn set_security(&self, uri: &str, lookalike: bool) {
         let secure = uri.starts_with("https://");
-        let internal = uri.starts_with("kestrel://") || uri.starts_with("file://") || uri.is_empty();
+        let internal =
+            uri.starts_with("kestrel://") || uri.starts_with("file://") || uri.is_empty();
         self.sec_icon.set_visible(!internal);
         if internal {
             return;
@@ -347,7 +359,8 @@ impl AddressBar {
             self.sec_icon.set_icon_name(Some("channel-insecure-symbolic"));
             self.sec_icon.add_css_class("warn");
             self.sec_icon.remove_css_class("secure");
-            self.sec_icon.set_tooltip_text(Some("Possible lookalike domain (punycode). Check carefully!"));
+            self.sec_icon
+                .set_tooltip_text(Some("Possible lookalike domain (punycode). Check carefully!"));
         } else if secure {
             self.sec_icon.set_icon_name(Some("changes-prevent-symbolic"));
             self.sec_icon.remove_css_class("warn");
@@ -363,7 +376,11 @@ impl AddressBar {
 
     pub fn set_star(&self, active: bool) {
         if let Some(icon) = self.star.first_child().and_downcast::<gtk::Image>() {
-            icon.set_icon_name(Some(if active { "starred-symbolic" } else { "star-symbolic" }));
+            icon.set_icon_name(Some(if active {
+                "starred-symbolic"
+            } else {
+                "star-symbolic"
+            }));
         }
         if active {
             self.star.add_css_class("active");
@@ -377,4 +394,3 @@ impl AddressBar {
         self.shield_label.set_text(&n.to_string());
     }
 }
-
