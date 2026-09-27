@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><title>Privacy</title>
+    <link rel="stylesheet" href="/src/styles/pages.css" /></head>
+  <body>
+    <div class="page-wrap">
+      <div class="page-head">
+        <h1>Privacy dashboard</h1>
+        <div class="page-actions">
+          <button class="kbtn" id="update">Update filter lists</button>
+          <button class="kbtn secondary" id="selftest">Run self-test</button>
+        </div>
+      </div>
+
+      <div class="stat-grid" id="stats"></div>
+
+      <div class="day-header">Blocked most (all time)</div>
+      <div id="top-domains"></div>
+
+      <div class="day-header">Engine self-test</div>
+      <div id="test" class="empty-state" style="padding:24px 0;text-align:left">
+        Run the self-test to verify blocking works right now in this browser.
+      </div>
+    </div>
+    <script type="module" src="/src/pages/privacy.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "identifier": "main-capability",
+  "description": "Local app surfaces: the chrome UI and internal pages.",
+  "local": true,
+  "webviews": ["chrome", "tab-*", "page-*"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-inner-size",
+    "core:window:allow-outer-size",
+    "core:window:allow-scale-factor"
+  ]
+}

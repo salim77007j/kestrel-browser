@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Kestrel Chrome</title>
+    <link rel="stylesheet" href="/src/styles/chrome.css" />
+  </head>
+  <body>
+    <div id="chrome" data-theme="light">
+      <!-- Tab strip (also the window drag region) -->
+      <div id="tabstrip">
+        <div id="tabs" role="tablist"></div>
+        <button id="newtab-btn" class="strip-btn" title="New tab (Ctrl+T)">
+          <svg viewBox="0 0 24 24"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>
+        </button>
+        <div id="window-controls">
+          <button id="win-min" class="win-btn" title="Minimize">
+            <svg viewBox="0 0 24 24"><path d="M5 12h14v2H5z"/></svg>
+          </button>
+          <button id="win-max" class="win-btn" title="Maximize">
+            <svg viewBox="0 0 24 24"><path d="M5 5h14v14H5V5zm2 2v10h10V7H7z"/></svg>
+          </button>
+          <button id="win-close" class="win-btn close" title="Close">
+            <svg viewBox="0 0 24 24"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19l1.4-1.4L13.4 12 19 6.4 17.6 5 12 10.6 6.4 5z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div id="toolbar">
+        <button class="tool-btn" id="btn-back" title="Back (Alt+Left)">
+          <svg viewBox="0 0 24 24"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L6.8 12z"/></svg>
+        </button>
+        <button class="tool-btn" id="btn-forward" title="Forward (Alt+Right)">
+          <svg viewBox="0 0 24 24"><path d="M8.6 16.6 10 18l6-6-6-6-1.4 1.4 4.6 4.6z"/></svg>
+        </button>
+        <button class="tool-btn" id="btn-reload" title="Reload (Ctrl+R)">
+          <svg id="reload-icon" viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        </button>
+        <button class="tool-btn hidden" id="btn-stop" title="Stop (Esc)">
+          <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+        </button>
+
+        <div id="omnibox-wrap">
+          <div id="omnibox">
+            <span id="site-icon">
+              <svg id="lock-icon" viewBox="0 0 24 24"><path d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm0 2a3 3 0 0 1 3 3v3H9V6a3 3 0 0 1 3-3z"/></svg>
+              <span id="site-favicon" class="letter-chip"></span>
+            </span>
+            <input id="omnibox-input" type="text" spellcheck="false"
+              placeholder="Search Google or type a URL" autocomplete="off" />
+            <button id="btn-star" class="omni-btn" title="Bookmark this tab (Ctrl+D)">
+              <svg viewBox="0 0 24 24"><path d="m12 17.27 5.18 3.13-1.37-5.9 4.57-3.96-6.03-.52L12 5.5 9.65 10.02l-6.03.52 4.57 3.96-1.37 5.9z"/></svg>
+            </button>
+          </div>
+          <div id="omnibox-dropdown" class="hidden"></div>
+        </div>
+
+        <button class="tool-btn" id="btn-shield" title="Privacy dashboard">
+          <svg viewBox="0 0 24 24"><path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 6h2v2h-2V7zm0 4h2v6h-2v-6z"/></svg>
+          <span id="shield-count" class="badge hidden">0</span>
+        </button>
+        <button class="tool-btn" id="btn-menu" title="Menu">
+          <svg viewBox="0 0 24 24"><path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>
+        </button>
+      </div>
+
+      <!-- Bookmarks bar -->
+      <div id="bookmarksbar"></div>
+
+      <!-- Find bar -->
+      <div id="findbar" class="hidden">
+        <input id="find-input" placeholder="Find in page" />
+        <span id="find-status"></span>
+        <button class="find-btn" id="find-prev" title="Previous">
+          <svg viewBox="0 0 24 24"><path d="M7.4 15.4 12 10.8l4.6 4.6L18 14l-6-6-6 6z"/></svg>
+        </button>
+        <button class="find-btn" id="find-next" title="Next">
+          <svg viewBox="0 0 24 24"><path d="M7.4 8.6 12 13.2l4.6-4.6L18 10l-6 6-6-6z"/></svg>
+        </button>
+        <button class="find-btn" id="find-close" title="Close (Esc)">
+          <svg viewBox="0 0 24 24"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19l1.4-1.4L13.4 12 19 6.4 17.6 5 12 10.6 6.4 5z"/></svg>
+        </button>
+      </div>
+
+      <!-- Context menu / popup layer -->
+      <div id="popup-layer" class="hidden"></div>
+
+      <!-- Toasts -->
+      <div id="toasts"></div>
+    </div>
+    <script type="module" src="/src/chrome/main.ts"></script>
+  </body>
+</html>

@@ -1,6 +1,6 @@
-/target
-Cargo.lock.orig
-*.debroot
+node_modules/
 dist/
-smoke/
-*.swp
+src-tauri/target/
+src-tauri/Cargo.lock
+*.log
+.DS_Store

@@ -1,27 +1,87 @@
-//! Per-origin permission store: key is "origin|kind".
+//! Per-origin permission decisions remembered across sessions
+//! (camera, microphone, geolocation, notifications, clipboard, midi, ...).
 
-use rusqlite::{params, Connection};
+use crate::store::JsonStore;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-pub fn get(conn: &Connection, origin: &str, kind: &str) -> Option<bool> {
-    let key = format!("{origin}|{kind}");
-    conn.query_row(
-        "SELECT granted FROM permissions WHERE key = ?1",
-        params![key],
-        |r| r.get::<_, i64>(0),
-    )
-    .ok()
-    .map(|v| v != 0)
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PermissionDecision {
+    Allow,
+    Deny,
 }
 
-pub fn set(conn: &Connection, origin: &str, kind: &str, granted: bool) {
-    let key = format!("{origin}|{kind}");
-    let _ = conn.execute(
-        "INSERT INTO permissions (key, granted, updated_at) VALUES (?1, ?2, ?3)
-         ON CONFLICT(key) DO UPDATE SET granted=?2, updated_at=?3",
-        params![key, granted as i64, super::db::now()],
-    );
+pub type PermissionMap = HashMap<String, PermissionDecision>;
+
+pub struct PermissionStore {
+    store: JsonStore,
+    /// origin ("https://example.com") -> kind ("camera") -> decision
+    map: HashMap<String, PermissionMap>,
 }
 
-pub fn clear(conn: &Connection) {
-    let _ = conn.execute("DELETE FROM permissions", []);
+impl PermissionStore {
+    pub fn new(store: JsonStore) -> Self {
+        Self {
+            map: store.load(),
+            store,
+        }
+    }
+
+    pub fn get(&self, origin: &str, kind: &str) -> Option<PermissionDecision> {
+        self.map.get(origin)?.get(kind).copied()
+    }
+
+    pub fn set(&mut self, origin: &str, kind: &str, decision: PermissionDecision) {
+        self.map
+            .entry(origin.to_string())
+            .or_default()
+            .insert(kind.to_string(), decision);
+        self.persist();
+    }
+
+    pub fn clear_origin(&mut self, origin: &str) -> bool {
+        let removed = self.map.remove(origin).is_some();
+        if removed {
+            self.persist();
+        }
+        removed
+    }
+
+    pub fn clear_all(&mut self) {
+        self.map.clear();
+        self.persist();
+    }
+
+    /// Snapshot for the settings page permissions manager.
+    pub fn snapshot(&self) -> &HashMap<String, PermissionMap> {
+        &self.map
+    }
+
+    fn persist(&self) {
+        self.store.save(&self.map).ok();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::store::JsonStore;
+
+    #[test]
+    fn set_get_clear() {
+        let dir = std::env::temp_dir().join(format!("kestrel-perm-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut p = PermissionStore::new(JsonStore::new(dir.join("perm.json")));
+        p.set("https://meet.test", "camera", PermissionDecision::Allow);
+        p.set("https://meet.test", "mic", PermissionDecision::Deny);
+        assert_eq!(
+            p.get("https://meet.test", "camera"),
+            Some(PermissionDecision::Allow)
+        );
+        assert_eq!(p.get("https://other.test", "camera"), None);
+        assert_eq!(p.snapshot().len(), 1);
+        assert!(p.clear_origin("https://meet.test"));
+        assert!(p.snapshot().is_empty());
+    }
 }

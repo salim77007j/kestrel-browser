@@ -1,85 +1,109 @@
-//! Crash-safe session journal.
-//!
-//! A `session.json` file records open tabs. A `session.clean` marker file is
-//! written on orderly shutdown and removed on launch; if tabs exist without
-//! the marker we know the previous session crashed (or was killed) and can
-//! tell the user their session was recovered.
+//! Session persistence: open tabs, closed-tab stack for Ctrl+Shift+T,
+//! crash-safe restore.
 
+use crate::store::JsonStore;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TabState {
-    pub uri: String,
+    pub url: String,
     pub title: String,
     pub pinned: bool,
     pub muted: bool,
-    pub private: bool,
+    pub group: Option<GroupInfo>,
+    pub zoom: f64,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GroupInfo {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub collapsed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClosedTab {
+    pub url: String,
+    pub title: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SessionState {
-    pub active: usize,
     pub tabs: Vec<TabState>,
+    pub closed: Vec<ClosedTab>,
+    /// false while the app is running; set true on clean exit. If false at
+    /// startup, the last session ended unexpectedly and gets restored.
+    #[serde(default)]
+    pub clean_exit: bool,
 }
 
-fn session_file() -> PathBuf {
-    crate::dirs::base_data().join("session.json")
-}
-
-fn clean_marker() -> PathBuf {
-    crate::dirs::base_data().join("session.clean")
-}
-
-pub fn save(state: &SessionState) -> Result<(), String> {
-    let path = session_file();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+impl SessionState {
+    pub fn load(store: &JsonStore) -> Self {
+        store.load_or(Self::default)
     }
-    let tmp = path.with_extension("json.tmp");
-    let text = serde_json::to_string(state).map_err(|e| e.to_string())?;
-    std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
-    Ok(())
-}
 
-pub fn load() -> Option<SessionState> {
-    let text = std::fs::read_to_string(session_file()).ok()?;
-    serde_json::from_str(&text).ok()
-}
+    pub fn save(&self, store: &JsonStore) {
+        store.save(self).ok();
+    }
 
-pub fn mark_clean() {
-    let _ = std::fs::write(clean_marker(), b"ok");
-}
+    pub fn crashed_last_time(&self) -> bool {
+        !self.clean_exit
+    }
 
-/// true when the previous run did NOT shut down cleanly but had open tabs.
-pub fn previous_run_crashed() -> bool {
-    !clean_marker().exists() && session_file().exists()
-}
+    pub fn push_closed(&mut self, url: String, title: String) {
+        self.closed.insert(0, ClosedTab { url, title });
+        if self.closed.len() > 25 {
+            self.closed.truncate(25);
+        }
+    }
 
-pub fn clear_marker() {
-    let _ = std::fs::remove_file(clean_marker());
+    pub fn pop_closed(&mut self) -> Option<ClosedTab> {
+        if self.closed.is_empty() {
+            None
+        } else {
+            Some(self.closed.remove(0))
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::store::JsonStore;
 
     #[test]
-    fn roundtrip() {
-        let state = SessionState {
-            active: 0,
-            tabs: vec![TabState {
-                uri: "https://example.com".into(),
-                title: "Example".into(),
-                pinned: false,
-                muted: true,
-                private: false,
-            }],
-        };
-        let text = serde_json::to_string(&state).unwrap();
-        let back: SessionState = serde_json::from_str(&text).unwrap();
-        assert_eq!(back.tabs.len(), 1);
-        assert!(back.tabs[0].muted);
+    fn closed_stack_and_crash_flag() {
+        let dir = std::env::temp_dir().join(format!("kestrel-sess-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = JsonStore::new(dir.join("session.json"));
+
+        let mut s = SessionState::load(&store);
+        assert!(s.crashed_last_time()); // never exited cleanly
+        s.push_closed("https://a.test".into(), "A".into());
+        s.push_closed("https://b.test".into(), "B".into());
+        s.tabs.push(TabState {
+            url: "https://c.test".into(),
+            title: "C".into(),
+            pinned: false,
+            muted: false,
+            group: Some(GroupInfo {
+                id: "g1".into(),
+                name: "Work".into(),
+                color: "blue".into(),
+                collapsed: false,
+            }),
+            zoom: 1.25,
+            active: true,
+        });
+        s.clean_exit = true;
+        s.save(&store);
+
+        let mut s2 = SessionState::load(&store);
+        assert!(!s2.crashed_last_time());
+        assert_eq!(s2.pop_closed().unwrap().url, "https://b.test");
+        assert_eq!(s2.tabs[0].group.as_ref().unwrap().name, "Work");
+        assert_eq!(s2.tabs[0].zoom, 1.25);
     }
 }

@@ -2,74 +2,60 @@ name: Kestrel CI
 
 on:
   push:
-    branches: ["main", "master"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
-  build-linux:
-    name: Build & test (ubuntu-24.04)
-    runs-on: ubuntu-24.04
+  core-tests:
+    name: Core (privacy + data) tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            crates/kestrel-privacy
+            crates/kestrel-data
+      - name: cargo test (pure Rust crates)
+        run: cargo test -p kestrel-privacy -p kestrel-data
+
+  build-windows:
+    name: Windows build (exe + NSIS installer)
+    runs-on: windows-latest
+    needs: core-tests
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libgtk-4-dev libwebkitgtk-6.0-dev libdbus-1-dev \
-            xvfb imagemagick fonts-dejavu-core fonts-liberation \
-            dpkg-dev file
-
-      - name: Install Rust toolchain
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - uses: actions/setup-node@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: kestrel-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: kestrel-${{ runner.os }}-
+          node-version: "22"
 
-      - name: cargo check
-        run: cargo check --workspace --all-targets
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
 
-      - name: Unit tests
-        run: cargo test -p kestrel-privacy -p kestrel-data
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
 
-      - name: Build release binary
-        run: cargo build --release --workspace
+      - name: Install frontend deps
+        run: npm ci
 
-      - name: Smoke test under Xvfb (real launch, render, screenshots)
-        run: |
-          export GITHUB_SHA_SHORT="${GITHUB_SHA::7}"
-          bash scripts/smoke-test.sh target/release/kestrel smoke
+      - name: Build (vite + tauri)
+        run: npm run tauri build
 
-      - name: Resource usage measurement
-        run: bash scripts/measure.sh target/release/kestrel smoke/metrics.csv
-
-      - name: Package (tar.gz + deb)
-        run: bash scripts/package.sh target/release/kestrel packaging dist
-
-      - name: Upload browser artifacts
+      - name: Upload portable executable
         uses: actions/upload-artifact@v4
         with:
-          name: kestrel-linux-amd64
-          path: dist/*
+          name: kestrel-windows-portable
+          path: src-tauri/target/release/kestrel.exe
+          if-no-files-found: error
 
-      - name: Upload smoke-test evidence
+      - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
         with:
-          name: kestrel-smoke-evidence
-          path: smoke/*
+          name: kestrel-windows-installer
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error

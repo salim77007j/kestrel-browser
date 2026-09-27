@@ -1,107 +1,164 @@
-//! History store.
+//! Browsing history (capped, local-only).
 
-use rusqlite::{params, Connection};
-use std::time::{SystemTime, UNIX_EPOCH};
+use crate::store::JsonStore;
+use serde::{Deserialize, Serialize};
 
-fn day_start() -> i64 {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    secs - (secs % 86400)
-}
+pub const MAX_ENTRIES: usize = 10_000;
 
-pub fn add(conn: &Connection, url: &str, title: &str) {
-    let now = super::db::now();
-    let _ = conn.execute(
-        "INSERT INTO history (url, title, visited_at) VALUES (?1, ?2, ?3)",
-        params![url, title, now],
-    );
-}
-
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoryEntry {
-    pub id: i64,
+    pub id: u64,
     pub url: String,
     pub title: String,
-    pub visited_at: i64,
+    pub visited_at: u64, // unix ms
+    pub visit_count: u64,
 }
 
-pub fn search(conn: &Connection, query: &str, limit: i64) -> Vec<HistoryEntry> {
-    let pattern = format!("%{}%", query.replace('%', ""));
-    let mut stmt = match conn.prepare_cached(
-        "SELECT id, url, COALESCE(title,''), visited_at FROM history
-         WHERE url LIKE ?1 OR title LIKE ?1 ORDER BY visited_at DESC LIMIT ?2",
-    ) {
-        Ok(s) => s,
-        Err(_) => return vec![],
-    };
-    let rows = stmt.query_map(params![pattern, limit], |r| {
-        Ok(HistoryEntry {
-            id: r.get(0)?,
-            url: r.get(1)?,
-            title: r.get(2)?,
-            visited_at: r.get(3)?,
-        })
-    });
-    match rows {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-        Err(_) => vec![],
+pub struct HistoryStore {
+    store: JsonStore,
+    entries: Vec<HistoryEntry>,
+    next_id: u64,
+}
+
+impl HistoryStore {
+    pub fn new(store: JsonStore) -> Self {
+        let entries: Vec<HistoryEntry> = store.load();
+        let next_id = entries.iter().map(|e| e.id).max().unwrap_or(0) + 1;
+        Self {
+            store,
+            entries,
+            next_id,
+        }
+    }
+
+    /// Record a visit. Same URL within the same day updates the existing
+    /// entry and moves it to the top (entries are ordered by recency).
+    pub fn visit(&mut self, url: &str, title: &str, now_ms: u64) {
+        if url.starts_with("kestrel-internal:") || url.starts_with("data:") {
+            return;
+        }
+        let day = now_ms / 86_400_000;
+        if let Some(pos) = self
+            .entries
+            .iter()
+            .position(|e| e.url == url && e.visited_at / 86_400_000 == day)
+        {
+            let mut e = self.entries.remove(pos);
+            if !title.is_empty() {
+                e.title = title.to_string();
+            }
+            e.visited_at = now_ms;
+            e.visit_count += 1;
+            self.entries.insert(0, e);
+            self.persist();
+            return;
+        }
+        self.entries.insert(
+            0,
+            HistoryEntry {
+                id: self.next_id,
+                url: url.to_string(),
+                title: title.to_string(),
+                visited_at: now_ms,
+                visit_count: 1,
+            },
+        );
+        self.next_id += 1;
+        if self.entries.len() > MAX_ENTRIES {
+            self.entries.truncate(MAX_ENTRIES);
+        }
+        self.persist();
+    }
+
+    /// Local search over url + title, most recent first.
+    pub fn search(&self, query: &str, limit: usize) -> Vec<HistoryEntry> {
+        let q = query.to_lowercase();
+        self.entries
+            .iter()
+            .filter(|e| {
+                q.is_empty() || e.url.to_lowercase().contains(&q) || e.title.to_lowercase().contains(&q)
+            })
+            .take(limit)
+            .cloned()
+            .collect()
+    }
+
+    pub fn delete(&mut self, id: u64) {
+        self.entries.retain(|e| e.id != id);
+        self.persist();
+    }
+
+    pub fn forget_site(&mut self, host: &str) {
+        self.entries
+            .retain(|e| !url_host(&e.url).eq_ignore_ascii_case(host));
+        self.persist();
+    }
+
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.persist();
+    }
+
+    pub fn all(&self) -> &[HistoryEntry] {
+        &self.entries
+    }
+
+    /// Top visited hosts across all history (for the privacy dashboard /
+    /// stats page).
+    pub fn top_hosts(&self, n: usize) -> Vec<(String, u64)> {
+        let mut counts: std::collections::HashMap<String, u64> = Default::default();
+        for e in &self.entries {
+            *counts.entry(url_host(&e.url)).or_insert(0) += 1;
+        }
+        let mut v: Vec<(String, u64)> = counts.into_iter().collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        v.truncate(n);
+        v
+    }
+
+    fn persist(&self) {
+        self.store.save(&self.entries).ok();
     }
 }
 
-/// Top sites (most visited unique hosts+paths) for the new-tab speed dial.
-pub fn top_sites(conn: &Connection, limit: i64) -> Vec<HistoryEntry> {
-    let mut stmt = match conn.prepare_cached(
-        "SELECT MIN(id), url, MAX(COALESCE(title,'')), MAX(visited_at) FROM history
-         WHERE url LIKE 'http%' GROUP BY url ORDER BY COUNT(*) DESC, MAX(visited_at) DESC LIMIT ?1",
-    ) {
-        Ok(s) => s,
-        Err(_) => return vec![],
-    };
-    let rows = stmt.query_map(params![limit], |r| {
-        Ok(HistoryEntry {
-            id: r.get(0)?,
-            url: r.get(1)?,
-            title: r.get(2)?,
-            visited_at: r.get(3)?,
-        })
-    });
-    match rows {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-        Err(_) => vec![],
-    }
-}
-
-pub fn remove(conn: &Connection, id: i64) {
-    let _ = conn.execute("DELETE FROM history WHERE id = ?1", params![id]);
-}
-
-pub fn clear_all(conn: &Connection) {
-    let _ = conn.execute("DELETE FROM history", []);
-}
-
-pub fn clear_today(conn: &Connection) {
-    let _ = conn.execute("DELETE FROM history WHERE visited_at >= ?1", params![day_start()]);
+fn url_host(url: &str) -> String {
+    let rest = url.split("://").nth(1).unwrap_or(url);
+    let end = rest.find(['/', '?', ':', '#']).unwrap_or(rest.len());
+    rest[..end].to_string()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn tmp_store(tag: &str) -> HistoryStore {
+        let dir = std::env::temp_dir().join(format!("kestrel-hist-{}-{}", tag, std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        HistoryStore::new(JsonStore::new(dir.join("history.json")))
+    }
+
     #[test]
-    fn add_search_clear() {
-        let dir = std::env::temp_dir().join(format!("kestrel-hist-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let conn = super::super::db::open(&dir.join("t.db")).unwrap();
-        add(&conn, "https://example.com/a", "Example A");
-        add(&conn, "https://example.com/b", "Example B");
-        add(&conn, "https://other.org/", "Other");
-        let hits = search(&conn, "example", 10);
-        assert_eq!(hits.len(), 2);
-        assert_eq!(top_sites(&conn, 2).len(), 2);
-        assert_eq!(top_sites(&conn, 10).len(), 3);
-        clear_all(&conn);
-        assert!(search(&conn, "", 10).is_empty());
-        let _ = std::fs::remove_dir_all(&dir);
+    fn visit_search_delete() {
+        let mut h = tmp_store("1");
+        h.visit("https://example.com/a", "Example A", 1_000);
+        h.visit("https://example.com/a", "Example A2", 2_000);
+        h.visit("https://rust-lang.org/", "Rust", 3_000);
+        assert_eq!(h.all().len(), 2);
+        // most recent visit first
+        assert_eq!(h.all()[0].title, "Rust");
+        assert_eq!(h.all()[1].title, "Example A2");
+        let res = h.search("rust", 10);
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].url, "https://rust-lang.org/");
+        h.delete(res[0].id);
+        assert_eq!(h.search("rust", 10).len(), 0);
+        assert_eq!(h.top_hosts(5)[0], ("example.com".to_string(), 1));
+    }
+
+    #[test]
+    fn internal_pages_not_recorded() {
+        let mut h = tmp_store("2");
+        h.visit("kestrel-internal:newtab", "New Tab", 1);
+        assert!(h.all().is_empty());
     }
 }

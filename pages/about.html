@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><title>About Kestrel</title>
+    <link rel="stylesheet" href="/src/styles/pages.css" /></head>
+  <body>
+    <div class="page-wrap" style="max-width:640px">
+      <div style="display:flex;align-items:center;gap:16px;margin:20px 0 8px">
+        <svg viewBox="0 0 24 24" width="44" height="44" fill="#1a73e8"><path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+        <div>
+          <h1 style="font-size:24px">Kestrel Browser</h1>
+          <div style="color:var(--text-2)">Version 0.2.0 · Fast. Private. Feather-light.</div>
+        </div>
+      </div>
+      <p style="line-height:1.7;color:var(--text-2);margin:18px 0">
+        Kestrel is an independent, privacy-first browser for Windows. A memory-safe
+        Rust core handles privacy, data and platform integration; rendering runs on
+        the Chromium-based WebView2 engine that ships with Windows 10/11, so pages
+        load fast with no extra runtime to install.
+      </p>
+      <ul style="line-height:1.9;color:var(--text-2);padding-left:20px">
+        <li>Network-level ad &amp; tracker blocking (adblock-rust, EasyList/EasyPrivacy/Annoyances)</li>
+        <li>Cosmetic filtering, HTTPS-only upgrades, third-party cookie stripping</li>
+        <li>Anti-fingerprinting (canvas / audio / WebGL / fonts / hardware)</li>
+        <li>Malware host + phishing-lookalike interstitials</li>
+        <li>Everything local: no accounts, no telemetry, no cloud</li>
+      </ul>
+      <p style="color:var(--text-2);font-size:12.5px;margin-top:22px">
+        Engine: WebView2 (Chromium) · UI: Tauri 2 multi-webview · Privacy core: kestrel-privacy (MPL-2.0)
+      </p>
+    </div>
+    <script type="module">
+      import { applyThemeFromSettings } from "/src/pages/shared.ts";
+      applyThemeFromSettings();
+    </script>
+  </body>
+</html>

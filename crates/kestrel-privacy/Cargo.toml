@@ -3,13 +3,10 @@ name = "kestrel-privacy"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Kestrel Browser privacy core: ad blocking, tracker & fingerprint protection"
+description = "Kestrel Browser privacy core: ad blocking, fingerprint protection, safe browsing"
 
 [dependencies]
-adblock = "0.13"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-ureq = { version = "2", default-features = false, features = ["tls"] }
-
-[dev-dependencies]
-regex = "1"
+adblock = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+idna = "1"

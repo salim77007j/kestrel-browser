@@ -1,0 +1,13 @@
+{
+  "identifier": "page-bridge",
+  "description": "Remote tab content may ONLY emit events through the validated page-event bridge (gestures, shortcuts, find results, save-page chunks).",
+  "local": false,
+  "webviews": ["tab-*"],
+  "remote": {
+    "urls": ["https://*", "http://*"]
+  },
+  "permissions": [
+    "core:event:allow-emit",
+    "page_event"
+  ]
+}

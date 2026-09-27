@@ -1,21 +1,21 @@
 [workspace]
 resolver = "2"
-members = [
-    "crates/kestrel-privacy",
-    "crates/kestrel-data",
-    "crates/kestrel-app",
-]
+members = ["crates/kestrel-privacy", "crates/kestrel-data", "src-tauri"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MPL-2.0"
-authors = ["Kestrel Team"]
-repository = "https://github.com/salim77007j/kestrel-browser"
+authors = ["Kestrel Browser Team"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+adblock = "0.13"
 
 [profile.release]
-opt-level = 3
+opt-level = "s"
 lto = "thin"
 codegen-units = 1
-strip = "symbols"
-panic = "unwind"
+panic = "abort"
+strip = true

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><title>Blocked</title>
+    <link rel="stylesheet" href="/src/styles/pages.css" /></head>
+  <body>
+    <div class="blocked-shell">
+      <div class="blocked-card">
+        <div class="warn-icon">
+          <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+        </div>
+        <h1 id="title">Kestrel blocked this page</h1>
+        <p id="detail">
+          This site may be dangerous. Kestrel checks every navigation against a
+          malware host blocklist and lookalike-domain detection before it loads.
+        </p>
+        <div class="url-box" id="url"></div>
+        <div class="actions">
+          <button class="kbtn" id="back">Back to safety</button>
+          <button class="kbtn secondary" id="ignore">Visit anyway (this session)</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/pages/blocked.ts"></script>
+  </body>
+</html>
