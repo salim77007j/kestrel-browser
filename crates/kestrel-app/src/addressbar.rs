@@ -186,7 +186,7 @@ impl AddressBar {
             self.star.connect_clicked(move |_| {
                 let Some(this7) = this7.upgrade() else { return };
                 if let Some(w) = this7.state.main_window() {
-                    w.win.activate_action("bookmark-toggle", None::<&glib::Variant>);
+                    gtk::prelude::WidgetExt::activate_action(&w.win, "bookmark-toggle", None::<&glib::Variant>);
                 }
             });
         }

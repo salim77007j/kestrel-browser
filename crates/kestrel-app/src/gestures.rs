@@ -25,6 +25,8 @@ pub fn install(w: &Rc<BrowserWindow>) {
     {
         let dragging = dragging.clone();
         let suppress_menu = suppress_menu.clone();
+        let start_x = start_x.clone();
+        let start_y = start_y.clone();
         let w2 = std::rc::Rc::downgrade(w);
         click.connect_pressed(move |gesture, _, x, y| {
             let _ = w2;

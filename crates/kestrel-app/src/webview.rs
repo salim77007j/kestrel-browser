@@ -92,9 +92,10 @@ pub fn create_tab(
 
     // Close button.
     {
+        let state2 = state.clone();
         let tab2 = tab.clone();
         tab.close_btn.connect_clicked(move |_| {
-            if let Some(w) = state.main_window() {
+            if let Some(w) = state2.main_window() {
                 if let Some(i) = w.index_of(&tab2) {
                     w.close_tab(i);
                 }

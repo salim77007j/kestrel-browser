@@ -347,7 +347,7 @@ impl BrowserWindow {
         }
     }
 
-    pub fn reopen_closed_tab(&self) {
+    pub fn reopen_closed_tab(self: &Rc<Self>) {
         let last = self.closed.borrow_mut().pop();
         if let Some((uri, _)) = last {
             self.new_tab(&uri, false, false);
