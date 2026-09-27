@@ -420,8 +420,12 @@ fn inject_cosmetic(state: &Rc<AppState>, v: &WebView) {
     }
     let rrx = state.query_cosmetic(&uri);
     let webview = v.clone();
-    glib::spawn_future_local(async move {
-        let Ok(cosmetic) = rrx.recv().await else { return };
+    let start = std::time::Instant::now();
+    glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+        if start.elapsed() > std::time::Duration::from_secs(10) {
+            return glib::ControlFlow::Break; // give up after 10s
+        }
+        let Ok(cosmetic) = rrx.try_recv() else { return glib::ControlFlow::Continue };
         let count = cosmetic.hide_css.len() as u64;
         if count == 0 && cosmetic.injected_script.is_empty() {
             return;
@@ -444,6 +448,7 @@ fn inject_cosmetic(state: &Rc<AppState>, v: &WebView) {
             js.push_str(&cosmetic.injected_script);
         }
         let _ = webview.evaluate_javascript(&js, None::<&str>, None::<&str>, None::<&gtk::gio::Cancellable>, |_| {});
+        glib::ControlFlow::Break
     });
 }
 

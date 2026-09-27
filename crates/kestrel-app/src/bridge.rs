@@ -212,11 +212,19 @@ fn handle_command(state: &Rc<AppState>, win: &Rc<BrowserWindow>, raw: &str) {
             let url = v["value"].as_str().unwrap_or("").to_string();
             let rrx = state.query_explain(&url, "https://example.com/");
             let win2 = std::rc::Rc::downgrade(win);
-            glib::spawn_future_local(async move {
-                if let Ok(result) = rrx.recv().await {
-                    if let Some(w) = win2.upgrade() {
-                        push_to_view(&w, &serde_json::json!({ "type": "test-url-result", "result": result }));
+            let start = std::time::Instant::now();
+            glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+                if start.elapsed() > std::time::Duration::from_secs(10) {
+                    return glib::ControlFlow::Break;
+                }
+                match rrx.try_recv() {
+                    Ok(result) => {
+                        if let Some(w) = win2.upgrade() {
+                            push_to_view(&w, &serde_json::json!({ "type": "test-url-result", "result": result }));
+                        }
+                        glib::ControlFlow::Break
                     }
+                    Err(_) => glib::ControlFlow::Continue,
                 }
             });
         }

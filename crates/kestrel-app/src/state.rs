@@ -40,12 +40,12 @@ pub enum EngineMsg {
     },
     Cosmetic {
         url: String,
-        reply: async_channel::Sender<CosmeticResult>,
+        reply: std::sync::mpsc::Sender<CosmeticResult>,
     },
     Explain {
         url: String,
         source: String,
-        reply: async_channel::Sender<String>,
+        reply: std::sync::mpsc::Sender<String>,
     },
 }
 
@@ -123,20 +123,18 @@ impl AppState {
     }
 
     fn install_channels(self: &Rc<Self>) {
-        // ---- UI channel (worker -> main loop) ----
-        let (tx, rx) = async_channel::unbounded::<WorkerMsg>();
+        // ---- UI channel (worker -> main loop): mpsc + 200ms polling ----
+        let (tx, rx) = std::sync::mpsc::channel::<WorkerMsg>();
         *self.tx.borrow_mut() = Some(tx);
-        let weak = Rc::downgrade(self);
-        glib::spawn_future_local(async move {
+        let state_for_poll = self.clone();
+        glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
             loop {
-                match rx.recv().await {
-                    Ok(msg) => {
-                        let Some(state) = weak.upgrade() else { return };
-                        state.handle_worker_msg(msg);
-                    }
-                    Err(_) => return,
+                match rx.try_recv() {
+                    Ok(msg) => state_for_poll.handle_worker_msg(msg),
+                    Err(_) => break,
                 }
             }
+            glib::ControlFlow::Continue
         });
 
         // ---- persistent engine thread (owns the !Send adblock engine) ----
@@ -164,14 +162,14 @@ impl AppState {
                                 .as_ref()
                                 .map(|e| e.cosmetic(&url))
                                 .unwrap_or_default();
-                            let _ = reply.send_blocking(res);
+                            let _ = reply.send(res);
                         }
                         Ok(EngineMsg::Explain { url, source, reply }) => {
                             let res = engine
                                 .as_ref()
                                 .map(|e| e.explain(&url, &source))
                                 .unwrap_or_else(|| "engine still loading…".into());
-                            let _ = reply.send_blocking(res);
+                            let _ = reply.send(res);
                         }
                         Err(_) => return,
                     }
@@ -194,22 +192,22 @@ impl AppState {
     }
 
     /// Ask the engine thread for cosmetic decisions; reply arrives on the UI loop.
-    pub fn query_cosmetic(&self, url: &str) -> async_channel::Receiver<CosmeticResult> {
-        let (rtx, rrx) = async_channel::bounded::<CosmeticResult>(1);
+    pub fn query_cosmetic(&self, url: &str) -> std::sync::mpsc::Receiver<CosmeticResult> {
+        let (rtx, rrx) = std::sync::mpsc::channel();
         if let Some(tx) = self.engine_tx.borrow().as_ref() {
             let _ = tx.send_blocking(EngineMsg::Cosmetic { url: url.to_string(), reply: rtx });
         } else {
-            let _ = rtx.send_blocking(CosmeticResult::default());
+            let _ = rtx.send(CosmeticResult::default());
         }
         rrx
     }
 
-    pub fn query_explain(&self, url: &str, source: &str) -> async_channel::Receiver<String> {
-        let (rtx, rrx) = async_channel::bounded::<String>(1);
+    pub fn query_explain(&self, url: &str, source: &str) -> std::sync::mpsc::Receiver<String> {
+        let (rtx, rrx) = std::sync::mpsc::channel();
         if let Some(tx) = self.engine_tx.borrow().as_ref() {
             let _ = tx.send_blocking(EngineMsg::Explain { url: url.to_string(), source: source.to_string(), reply: rtx });
         } else {
-            let _ = rtx.send_blocking("engine still loading…".into());
+            let _ = rtx.send("engine still loading…".into());
         }
         rrx
     }
