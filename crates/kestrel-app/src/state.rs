@@ -156,6 +156,7 @@ impl AppState {
                             let cb_json =
                                 kestrel_privacy::converter::to_content_blocker(&rules, 120_000)
                                     .unwrap_or_else(|_| "[]".into());
+                            eprintln!("kestrel: engine rebuilt; sending FiltersLoaded (cb_json {} bytes, hosts {})", cb_json.len(), hosts.len());
                             let _ = ui_tx.send(WorkerMsg::FiltersLoaded { hosts, cb_json, statuses, rule_count });
                         }
                         Ok(EngineMsg::Cosmetic { url, reply }) => {
@@ -269,6 +270,7 @@ impl AppState {
         statuses: Vec<ListStatus>,
         rule_count: usize,
     ) {
+        eprintln!("kestrel: FiltersLoaded on UI thread; compiling WebKit filter");
         self.rule_count.set(rule_count);
         self.shield.borrow_mut().update_hosts(&hosts);
         *self.list_statuses.borrow_mut() = statuses;
@@ -286,6 +288,7 @@ impl AppState {
                 let Some(state) = weak.upgrade() else { return };
                 match res {
                     Ok(filter) => {
+                        eprintln!("kestrel: WebKit filter compiled OK");
                         state.filters_active.store(true, Ordering::SeqCst);
                         state.filter_compile_ok.set(true);
                         for w in state.windows.borrow().iter() {
@@ -297,6 +300,8 @@ impl AppState {
                         state.filter_compile_ok.set(false);
                         eprintln!("kestrel: filter compile failed: {e}");
                     }
+                    #[allow(unreachable_patterns)]
+                    _ => {}
                 }
                 for w in state.windows.borrow().iter() {
                     w.refresh_internal_pages();
