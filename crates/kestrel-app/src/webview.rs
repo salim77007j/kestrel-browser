@@ -11,7 +11,7 @@ use gtk::{gio, glib};
 use std::cell::RefCell;
 use std::rc::Rc;
 use webkit::prelude::*;
-use webkit::{LoadEvent, NetworkSession, PolicyDecisionType, UserContentManager, WebView, WebViewBuilder};
+use webkit::{LoadEvent, NetworkSession, PolicyDecisionType, UserContentManager, WebView};
 
 pub fn create_tab(
     state: Rc<AppState>,
@@ -42,7 +42,7 @@ pub fn create_tab(
         state.session.clone()
     };
 
-    let webview = WebViewBuilder::new()
+    let webview = WebView::builder()
         .web_context(&state.webctx)
         .user_content_manager(&ucm)
         .network_session(&session)
@@ -94,8 +94,10 @@ pub fn create_tab(
     {
         let tab2 = tab.clone();
         tab.close_btn.connect_clicked(move |_| {
-            if let Some(i) = win2.index_of(&tab2) {
-                win2.close_tab(i);
+            if let Some(w) = state.main_window() {
+                if let Some(i) = w.index_of(&tab2) {
+                    w.close_tab(i);
+                }
             }
         });
     }

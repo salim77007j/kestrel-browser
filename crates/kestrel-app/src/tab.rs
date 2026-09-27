@@ -4,6 +4,7 @@ use crate::state::AppState;
 use gtk::prelude::*;
 use gtk::{self, glib};
 use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 use webkit::prelude::*;
 use webkit::WebView;
 

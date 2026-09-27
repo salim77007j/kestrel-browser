@@ -290,7 +290,7 @@ fn push_to_view(win: &Rc<BrowserWindow>, payload: &serde_json::Value) {
             "window.__kestrel && window.__kestrel.onMessage && window.__kestrel.onMessage({})",
             payload.to_string()
         );
-        let _ = tab.webview.evaluate_javascript(&js, None::<&str>, None::<&str>, None::<&glib::Cancellable>, |_| {});
+        let _ = tab.webview.evaluate_javascript(&js, None::<&str>, None::<&str>, None::<&gtk::gio::Cancellable>, |_| {});
     }
 }
 
@@ -385,5 +385,5 @@ pub fn push_state(webview: &WebView, state: &Rc<AppState>) {
         "window.__kestrel && window.__kestrel.receiveState && window.__kestrel.receiveState({})",
         payload.to_string()
     );
-    let _ = webview.evaluate_javascript(&js, None::<&str>, None::<&str>, None::<&glib::Cancellable>, |_| {});
+    let _ = webview.evaluate_javascript(&js, None::<&str>, None::<&str>, None::<&gtk::gio::Cancellable>, |_| {});
 }

@@ -42,7 +42,7 @@ pub struct AppState {
     pub windows: RefCell<Vec<crate::window::BrowserWindow>>,
     pub list_statuses: RefCell<Vec<ListStatus>>,
     pub filter_compile_ok: Cell<bool>,
-    tx: RefCell<Option<glib::Sender<WorkerMsg>>>,
+    tx: RefCell<Option<async_channel::Sender<WorkerMsg>>>,
 }
 
 use kestrel_data::Settings;
@@ -101,7 +101,7 @@ impl AppState {
     }
 
     fn install_worker_channel(self: &Rc<Self>) {
-        let (tx, rx) = glib::MainContext::channel::<WorkerMsg>(glib::Priority::DEFAULT);
+        let (tx, rx) = async_channel::unbounded::<WorkerMsg>();
         *self.tx.borrow_mut() = Some(tx);
         let weak = Rc::downgrade(self);
         glib::spawn_future_local(async move {

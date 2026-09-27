@@ -68,11 +68,11 @@ pub fn confirm_tls_error(_state: &Rc<AppState>, _errors: u32) -> bool {
 }
 
 fn kind_label(request: &webkit::PermissionRequest) -> String {
-    if let Ok(media) = request.clone().dynamic_cast::<webkit::MediaPermissionRequest>() {
-        if media.requesting_camera_capture_state() != webkit::MediaCaptureState::None {
+    if let Ok(media) = request.clone().dynamic_cast::<webkit::UserMediaPermissionRequest>() {
+        if media.is_for_video_device() {
             return "camera".into();
         }
-        if media.requesting_microphone_capture_state() != webkit::MediaCaptureState::None {
+        if media.is_for_audio_device() {
             return "microphone".into();
         }
     }

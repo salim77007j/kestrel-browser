@@ -245,7 +245,7 @@ impl AddressBar {
             || t.starts_with("kestrel://")
             || (t.contains('.') && !t.contains(' ') && t.len() > 3);
         if looks_like_url {
-            let uri = crate::window::normalize_uri(t);
+            let uri = crate::session::normalize_uri(t);
             out.push(Suggestion {
                 kind: "URL",
                 title: t.to_string(),
@@ -310,7 +310,18 @@ impl AddressBar {
 
     pub fn navigate(&self, text: &str) {
         self.popover.popdown();
-        let uri = crate::window::normalize_uri(text);
+        let t = text.trim();
+        let looks_like_url = t.starts_with("http://")
+            || t.starts_with("https://")
+            || t.starts_with("kestrel://")
+            || t.starts_with("file://")
+            || t.starts_with("localhost")
+            || (t.contains('.') && !t.contains(' ') && !t.is_empty());
+        let uri = if looks_like_url {
+            crate::session::normalize_uri(t)
+        } else {
+            self.state.settings.borrow().search_url(t)
+        };
         if let Some(w) = self.state.main_window() {
             w.load_active(&uri);
         }

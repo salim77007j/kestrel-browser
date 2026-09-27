@@ -27,9 +27,8 @@ pub fn normalize_uri(text: &str) -> String {
     if domain_like {
         format!("https://{t}")
     } else {
-        // Search
-        // (settings borrow must happen on main thread; caller is main)
-        crate::current_search_url(t)
+        // Fallback search (address bar uses the configured engine instead).
+        format!("https://duckduckgo.com/?q={}", kestrel_data::settings::url_encode(t))
     }
 }
 
