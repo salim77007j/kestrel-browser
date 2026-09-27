@@ -190,10 +190,17 @@ fn pattern_to_regex(pattern: &str) -> Option<String> {
         if anchored_end {
             // Boundary after the host/path. WebKit's content-filter regex
             // engine rejects disjunctions (`|`), so we cannot write
-            // `([/?#:]|$)`. A character class is universally supported;
-            // bare-host URLs ("https://host") are canonicalized by WebKit
-            // to include a trailing `/`, so the class still matches them.
-            re.push_str("[/?:#]");
+            // `([/?#:]|$)`. Two safe forms instead:
+            //   * bare host: REQUIRED class — WebKit canonicalizes
+            //     "https://host" with a trailing `/`, so the char always
+            //     exists, and requiring it blocks "host.evil.io" tricks;
+            //   * host + path: OPTIONAL class — the path literal anchors the
+            //     match, and URLs may legitimately end right after the path.
+            if path.is_some() {
+                re.push_str("[/?:#]?");
+            } else {
+                re.push_str("[/?:#]");
+            }
         }
         Some(re)
     } else if pattern.starts_with('|') && !pattern.starts_with("||") {
@@ -244,8 +251,11 @@ mod tests {
         assert!(!re.contains('|'));
         let matcher = regex::Regex::new(&re).unwrap();
         assert!(matcher.is_match("https://tracker.net/pixel.js"));
-        assert!(matcher.is_match("https://a.tracker.net/pixel.js?x=1"));
+        assert!(matcher.is_match("https://tracker.net/pixel.js?v=2"));
+        assert!(matcher.is_match("https://a.tracker.net/pixel.js"));
         assert!(!matcher.is_match("https://tracker.net/other.js"));
+        assert!(!matcher.is_match("https://tracker.net.evil.io/pixel.js"));
+        assert!(!matcher.is_match("https://notracker.net/pixel.js"));
     }
 
     #[test]
