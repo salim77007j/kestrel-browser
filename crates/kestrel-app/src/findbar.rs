@@ -2,6 +2,7 @@
 
 use gtk::prelude::*;
 use gtk::{glib, RevealerTransitionType};
+use std::rc::Rc;
 use webkit::prelude::*;
 use webkit::WebView;
 
@@ -10,13 +11,11 @@ pub struct FindBar {
     pub revealer: gtk::Revealer,
     entry: gtk::Entry,
     matches: gtk::Label,
-    find: RefCellSlot,
+    find: std::cell::RefCell<Option<webkit::FindController>>,
 }
 
-type RefCellSlot = std::cell::RefCell<Option<webkit::FindController>>;
-
 impl FindBar {
-    pub fn new() -> Self {
+    pub fn new() -> Rc<Self> {
         let revealer = gtk::Revealer::new();
         revealer.add_css_class("k-findbar");
         revealer.set_transition_type(RevealerTransitionType::SlideUp);
@@ -30,7 +29,6 @@ impl FindBar {
 
         let matches = gtk::Label::new(None);
         matches.add_css_class("matches");
-        matches.set_text("");
 
         let prev = gtk::Button::from_icon_name("go-up-symbolic");
         let next = gtk::Button::from_icon_name("go-down-symbolic");
@@ -47,73 +45,78 @@ impl FindBar {
         row.append(&close);
         revealer.set_child(Some(&row));
 
-        let find: RefCellSlot = std::cell::RefCell::new(None);
-
-        let s = Self { revealer, entry, matches, find };
-
-        {
-            let s2 = s.clone();
+        Rc::new_cyclic(|slot| {
+            let weak = slot.clone();
             entry.connect_activate(move |e| {
-                let text = e.text().to_string();
-                s2.launch_search(&text, true);
+                if let Some(s) = weak.upgrade() {
+                    s.launch_search(&e.text().to_string());
+                }
             });
-        }
+            let weak2 = slot.clone();
+            entry.connect_changed(move |e| {
+                if let Some(s) = weak2.upgrade() {
+                    s.launch_search(&e.text().to_string());
+                }
+            });
+            let weak3 = slot.clone();
+            next.connect_clicked(move |_| {
+                if let Some(s) = weak3.upgrade() {
+                    if let Some(fc) = s.find.borrow().as_ref() {
+                        fc.search_next();
+                    }
+                }
+            });
+            let weak4 = slot.clone();
+            prev.connect_clicked(move |_| {
+                if let Some(s) = weak4.upgrade() {
+                    if let Some(fc) = s.find.borrow().as_ref() {
+                        fc.search_previous();
+                    }
+                }
+            });
+            let entry2 = entry.clone();
+            let revealer2 = revealer.clone();
+            close.connect_clicked(move |_| {
+                Self::hide_static(&entry2, &revealer2);
+            });
 
-        s
+            Self {
+                revealer,
+                entry,
+                matches,
+                find: std::cell::RefCell::new(None),
+            }
+        })
     }
 
     pub fn attach(&self, webview: &WebView) {
-        let fc = webview.find_controller();
-        *self.find.borrow_mut() = Some(fc.clone());
-
-        fc.connect_counted_matches(glib::clone!(
-            #[weak(rename_to = matches)]
-            self.matches,
-            move |_, count| {
-                matches.set_text(&format!("{count} matches"));
-            }
-        ));
-        fc.connect_found_text(glib::clone!(
-            #[weak(rename_to = matches)]
-            self.matches,
-            move |_, count| {
-                if count > 0 {
+        if let Some(fc) = webview.find_controller() {
+            fc.connect_counted_matches(glib::clone!(
+                #[weak(rename_to = matches)]
+                self.matches,
+                move |_, count| {
+                    matches.set_text(&format!("{count} matches"));
+                }
+            ));
+            fc.connect_found_text(glib::clone!(
+                #[weak(rename_to = matches)]
+                self.matches,
+                move |_, count| {
                     matches.set_text(&format!("1 of {count}"));
                 }
-            }
-        ));
-        fc.connect_failed_to_find_text(glib::clone!(
-            #[weak(rename_to = matches)]
-            self.matches,
-            move |_| {
-                matches.set_text("no matches");
-            }
-        ));
-
-        let s2 = self.clone();
-        entry.connect_changed(move |e| {
-            s2.launch_search(&e.text().to_string(), true);
-        });
-        let s3 = self.clone();
-        next.connect_clicked(move |_| {
-            if let Some(fc) = s3.find.borrow().as_ref() {
-                fc.search_next();
-            }
-        });
-        let s4 = self.clone();
-        prev.connect_clicked(move |_| {
-            if let Some(fc) = s4.find.borrow().as_ref() {
-                fc.search_previous();
-            }
-        });
-        let entry2 = self.entry.clone();
-        let revealer2 = self.revealer.clone();
-        close.connect_clicked(move |_| {
-            Self::hide_static(&entry2, &revealer2);
-        });
+            ));
+            fc.connect_failed_to_find_text(glib::clone!(
+                #[weak(rename_to = matches)]
+                self.matches,
+                move |_| {
+                    matches.set_text("no matches");
+                }
+            ));
+            *self.find.borrow_mut() = Some(fc);
+        }
     }
 
-    fn launch_search(&self, text: &str, _forward: bool) {
+    fn launch_search(&self, text: &str) {
         if text.is_empty() {
             if let Some(fc) = self.find.borrow().as_ref() {
                 fc.search_finish();
@@ -144,5 +147,18 @@ impl FindBar {
             fc.search_finish();
         }
         Self::hide_static(&self.entry, &self.revealer);
+    }
+}
+
+impl glib::clone::Downgrade for FindBar {
+    type Weak = std::rc::Weak<FindBar>;
+    fn downgrade(&self) -> Self::Weak {
+        std::rc::Weak::downgrade(self)
+    }
+}
+impl glib::clone::Upgrade for std::rc::Weak<FindBar> {
+    type Strong = std::rc::Rc<FindBar>;
+    fn upgrade(&self) -> Option<Self::Strong> {
+        std::rc::Weak::upgrade(self)
     }
 }

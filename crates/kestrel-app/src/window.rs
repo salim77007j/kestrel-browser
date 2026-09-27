@@ -318,7 +318,8 @@ impl BrowserWindow {
         if !uri.is_empty() && !tab.private && tab.internal.is_none() {
             let title = tab.title.borrow().clone();
             self.closed.borrow_mut().push((uri, title));
-            if self.closed.borrow().len() > 20 {
+            let len = self.closed.borrow().len();
+            if len > 20 {
                 self.closed.borrow_mut().remove(0);
             }
         }
@@ -375,9 +376,27 @@ impl BrowserWindow {
             let tab = self.tabs.borrow()[cur as usize].clone();
             self.tabs.borrow_mut().remove(cur as usize);
             self.tabs.borrow_mut().insert(next as usize, tab);
-            let tabs = self.tabs.borrow();
-            self.tabbar.reorder_child(&tabs[next as usize].button, next);
             self.active.set(next as usize);
+            // Rebuild the strip order (Box::reorder is not exposed).
+            let buttons: Vec<gtk::Widget> = self
+                .tabs
+                .borrow()
+                .iter()
+                .map(|t| t.button.clone().upcast::<gtk::Widget>())
+                .collect();
+            for b in &buttons {
+                self.tabbar.remove(b);
+            }
+            let buttons: Vec<gtk::Widget> = self
+                .tabs
+                .borrow()
+                .iter()
+                .map(|t| t.button.clone().upcast::<gtk::Widget>())
+                .collect();
+            for b in &buttons {
+                self.tabbar.append(b);
+            }
+            self.select_tab(next as usize);
         }
     }
 
@@ -485,6 +504,19 @@ impl Deref for BrowserWindow {
     }
 }
 
+impl glib::clone::Downgrade for BrowserWindow {
+    type Weak = std::rc::Weak<BrowserWindow>;
+    fn downgrade(&self) -> Self::Weak {
+        std::rc::Weak::downgrade(self)
+    }
+}
+impl glib::clone::Upgrade for std::rc::Weak<BrowserWindow> {
+    type Strong = std::rc::Rc<BrowserWindow>;
+    fn upgrade(&self) -> Option<Self::Strong> {
+        std::rc::Weak::upgrade(self)
+    }
+}
+
 /// Wire up window-level buttons and lifecycle.
 pub fn wire_window_signals(
     w: &Rc<BrowserWindow>,
@@ -500,9 +532,11 @@ pub fn wire_window_signals(
     downloads_btn: &gtk::Button,
 ) {
     {
-        let w2 = w.clone();
+        let w2 = std::rc::Rc::downgrade(w);
         newtab_btn.connect_clicked(move |_| {
-            w2.new_tab("kestrel://newtab", false, false);
+            if let Some(w2) = w2.upgrade() {
+                w2.new_tab("kestrel://newtab", false, false);
+            }
         });
     }
     min_btn.connect_clicked(glib::clone!(
@@ -524,9 +558,11 @@ pub fn wire_window_signals(
         }
     ));
     {
-        let w2 = w.clone();
+        let w2 = std::rc::Rc::downgrade(w);
         close_btn.connect_clicked(move |_| {
-            w2.win.close();
+            if let Some(w2) = w2.upgrade() {
+                w2.win.close();
+            }
         });
     }
     back_btn.connect_clicked(glib::clone!(
@@ -580,11 +616,16 @@ pub fn wire_window_signals(
         }
     ));
 
-    // Save session on close (and allow closing).
+    // Save session on close, drop the window from the registry, allow closing.
     {
-        let w2 = w.clone();
+        let w2 = std::rc::Rc::downgrade(&w);
+        let state2 = w.state.clone();
         w.win.connect_close_request(move |_| {
-            crate::session::save_session(&w2.state);
+            if let Some(w2) = w2.upgrade() {
+                crate::session::save_session(&w2.state);
+                let this_ptr = std::rc::Rc::as_ptr(&w2);
+                state2.windows.borrow_mut().retain(|x| !std::ptr::eq(std::rc::Rc::as_ptr(x), this_ptr));
+            }
             false // allow close
         });
     }

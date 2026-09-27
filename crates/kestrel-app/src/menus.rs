@@ -3,6 +3,7 @@
 use crate::window::BrowserWindow;
 use gtk::prelude::*;
 use gtk::{glib, gio};
+use std::rc::Rc;
 
 pub fn install(w: &Rc<BrowserWindow>, btn: &gtk::MenuButton) {
     let menu = gio::Menu::new();
@@ -56,21 +57,10 @@ pub fn show_web_context_menu(w: &Rc<BrowserWindow>, is_link: bool, link: &str) {
     if is_link && !link.is_empty() {
         let sec_link = gio::Menu::new();
         let open_item = gio::MenuItem::new(Some("Open Link in New Tab"), None);
-        let link_owned = link.to_string();
-        let w2 = w.clone();
-        open_item.connect_activate(glib::clone!(
-            #[weak]
-            w2,
-            move |_| {
-                w2.new_tab(&link_owned, true, false);
-            }
-        ));
+        open_item.set_action_and_target_value(Some("win.open-link"), Some(&link.to_variant()));
         sec_link.append_item(&open_item);
         let copy_item = gio::MenuItem::new(Some("Copy Link"), None);
-        let link2 = link.to_string();
-        copy_item.connect_activate(move |_, _| {
-            copy_to_clipboard(&link2);
-        });
+        copy_item.set_action_and_target_value(Some("win.copy-link"), Some(&link.to_variant()));
         sec_link.append_item(&copy_item);
         menu.append_section(None, &sec_link);
     }
@@ -111,3 +101,7 @@ fn copy_to_clipboard(text: &str) {
     let clipboard = display.clipboard();
     clipboard.set_text(text);
 }
+
+// Keep glib in scope for to_variant()/to_string() trait usage above.
+#[allow(unused_imports)]
+use glib::prelude::*;

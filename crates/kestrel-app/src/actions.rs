@@ -4,6 +4,7 @@
 use crate::window::BrowserWindow;
 use gtk::prelude::*;
 use gtk::glib;
+use std::rc::Rc;
 use webkit::prelude::*;
 
 pub fn install(w: &Rc<BrowserWindow>) {
@@ -16,7 +17,7 @@ pub fn install(w: &Rc<BrowserWindow>) {
     macro_rules! act {
         ($name:expr, $state:expr, $body:expr) => {{
             let w = $state.clone();
-            let action = gio_shim_simple_action($name, None::<&str>);
+            let action = gio_shim_simple_action($name, None::<&glib::VariantTy>);
             action.connect_activate(glib::clone!(#[weak] w, move |_, _| {
                 let f: fn(&Rc<BrowserWindow>) = $body;
                 f(&w);
@@ -117,7 +118,7 @@ pub fn install(w: &Rc<BrowserWindow>) {
     });
 
     // Parameterized select-tab action for Alt+1..8
-    let action = gio_shim_simple_action("select-tab", Some(&String::static_variant_type()));
+    let action = gio_shim_simple_action("select-tab", Some(String::static_variant_type()));
     {
         let w2 = w.clone();
         action.connect_activate(move |_, param| {
@@ -128,6 +129,29 @@ pub fn install(w: &Rc<BrowserWindow>) {
         });
     }
     a.add_action(&action);
+
+    // Context-menu link actions (parameterized)
+    let open_link = gio_shim_simple_action("open-link", Some(String::static_variant_type()));
+    {
+        let w2 = w.clone();
+        open_link.connect_activate(move |_, param| {
+            if let Some(uri) = param.and_then(|v| v.str().map(|s| s.to_string())) {
+                w2.new_tab(&crate::session::normalize_uri(&uri), false, false);
+            }
+        });
+    }
+    a.add_action(&open_link);
+
+    let copy_link = gio_shim_simple_action("copy-link", Some(String::static_variant_type()));
+    {
+        copy_link.connect_activate(move |_, param| {
+            if let Some(uri) = param.and_then(|v| v.str().map(|s| s.to_string())) {
+                let display = gtk::gdk::Display::default().unwrap();
+                display.clipboard().set_text(&uri);
+            }
+        });
+    }
+    a.add_action(&copy_link);
 
     install_accelerators(w);
 }
@@ -164,7 +188,7 @@ fn save_page(w: &Rc<BrowserWindow>) {
     let dialog = gtk::FileDialog::new();
     dialog.set_initial_name(Some("page.mhtml"));
     let w2 = w.clone();
-    dialog.save(Some(&w.win), None::<&gio::Cancellable>, move |res| {
+    dialog.save(Some(&w.win), None::<&gtk::gio::Cancellable>, move |res| {
         if let Ok(file) = res {
             if let Some(path) = file.path() {
                 let webview = w2.current_tab().map(|t| t.webview.clone());
@@ -172,10 +196,10 @@ fn save_page(w: &Rc<BrowserWindow>) {
                     v.save_to_file(
                         &file,
                         webkit::SaveMode::Mhtml,
-                        None::<&gio::Cancellable>,
+                        None::<&gtk::gio::Cancellable>,
                         glib::clone!(#[strong] path, move |result| {
                             if result.is_err() {
-                                eprintln!("kestrel: save page failed");
+                                eprintln!("kestrel: save page failed: {}", path.display());
                             }
                         }),
                     );
@@ -214,7 +238,6 @@ fn install_accelerators(w: &Rc<BrowserWindow>) {
         ("win.open-downloads", &["<Primary>J"]),
         ("win.open-settings", &["<Primary>comma"]),
         ("win.mute-tab", &["<Primary>M"]),
-        ("win.pin-tab", &["<Primary><Shift>P"]),
         ("app.quit", &["<Primary>Q"]),
         ("win.select-tab(0)", &["<Alt>1"]),
         ("win.select-tab(1)", &["<Alt>2"]),

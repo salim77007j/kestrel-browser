@@ -11,7 +11,7 @@ pub fn apply(theme: &str) {
     let display = gdk::Display::default().expect("no display");
     let dark = theme != "light";
 
-    let settings = Settings::default();
+    let settings = Settings::default().expect("no GTK settings");
     settings.set_gtk_application_prefer_dark_theme(dark);
 
     let provider = gtk::CssProvider::new();

@@ -4,6 +4,7 @@
 use crate::state::AppState;
 use gtk::prelude::*;
 use gtk::glib;
+use std::rc::Rc;
 use webkit::prelude::*;
 
 pub fn handle(state: &Rc<AppState>, request: &webkit::PermissionRequest) {

@@ -1,0 +1,175 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Kestrel UI reference</title>
+<style>
+* { box-sizing: border-box; margin: 0; }
+body {
+  width: 1440px; height: 900px; overflow: hidden;
+  font-family: "Inter", "Cantarell", "Segoe UI", system-ui, sans-serif;
+  background: #0B0E12; color: #E6EAF0;
+  display: flex; flex-direction: column;
+}
+/* ---- header / tabs ---- */
+.header {
+  height: 44px; background: #0B0E12; border-bottom: 1px solid #1C232C;
+  display: flex; align-items: flex-end; padding: 0 8px 0 10px;
+}
+.tabs { display: flex; align-items: flex-end; gap: 2px; overflow: hidden; flex: 0 1 auto; }
+.tab {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px 8px 12px; min-width: 150px; max-width: 230px;
+  border-radius: 9px 9px 0 0; color: #93A0B4; font-size: 12.5px;
+}
+.tab.active { background: #1A2028; color: #E6EAF0; font-weight: 600; box-shadow: inset 0 -2px 0 #2DD4BF; }
+.tab .fav {
+  width: 18px; height: 18px; border-radius: 5px; background: #232B35; color: #2DD4BF;
+  display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; flex-shrink: 0;
+}
+.tab .fav.private { background: #3B2A54; color: #C4B5FD; }
+.tab .t { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tab .x { opacity: .75; width: 18px; text-align: center; border-radius: 5px; }
+.tab .x:hover { background: rgba(248,113,113,.2); color: #F87171; }
+.newtab {
+  margin: 0 2px 4px 6px; width: 26px; height: 26px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center; color: #93A0B4; font-size: 15px;
+}
+.newtab:hover { background: rgba(230,234,240,.08); }
+.spacer { flex: 1; }
+.winbtns { display: flex; gap: 6px; padding-bottom: 8px; }
+.winbtn { width: 30px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center; color: #93A0B4; font-size: 11px; }
+.winbtn.close:hover { background: #E81123; color: #fff; }
+/* ---- toolbar ---- */
+.toolbar {
+  height: 46px; background: #1A2028; border-bottom: 1px solid #1C232C;
+  display: flex; align-items: center; gap: 4px; padding: 0 10px;
+}
+.btn {
+  width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  color: #C9D3E0; font-size: 14px;
+}
+.btn:hover { background: rgba(230,234,240,.07); }
+.btn.disabled { color: #4A5462; }
+.address {
+  flex: 1; display: flex; align-items: center; gap: 8px;
+  background: #12161C; border: 1px solid #262D37; border-radius: 12px;
+  height: 34px; padding: 0 8px 0 12px; margin: 0 6px;
+}
+.address .url { flex: 1; font-size: 13.5px; color: #E6EAF0; }
+.address .lock { color: #2DD4BF; font-size: 12px; }
+.shield {
+  display: flex; align-items: center; gap: 4px; color: #2DD4BF;
+  padding: 2px 6px; border-radius: 7px; font-size: 10.5px; font-weight: 700;
+}
+.shield:hover { background: rgba(45,212,191,.12); }
+.star { color: #FBBF24; }
+.dl-badge {
+  position: relative;
+}
+.dl-badge .badge {
+  position: absolute; top: 1px; right: 1px; background: #2DD4BF; color: #06251F;
+  font-size: 8.5px; font-weight: 800; border-radius: 999px; padding: 0 4px;
+}
+/* ---- page: new tab ---- */
+.content { flex: 1; overflow: hidden; position: relative; }
+.ntp { max-width: 640px; margin: 0 auto; padding-top: 84px; text-align: center; }
+.logo { font-size: 32px; font-weight: 800; letter-spacing: -0.5px; display: flex; align-items: center; justify-content: center; gap: 12px; }
+.logo .mark {
+  width: 38px; height: 38px; border-radius: 11px;
+  background: linear-gradient(135deg, #2DD4BF, #0EA5E9);
+  display: flex; align-items: center; justify-content: center; color: #06251F; font-weight: 900; font-size: 18px;
+}
+.logo .k { color: #2DD4BF; }
+.searchwrap {
+  display: flex; align-items: center; gap: 10px; margin: 26px auto 30px;
+  background: #12161C; border: 1px solid #262D37; border-radius: 999px;
+  padding: 13px 20px; box-shadow: 0 8px 28px rgba(0,0,0,.35); width: 560px;
+}
+.searchwrap .ph { flex: 1; text-align: left; color: #6B7686; font-size: 14.5px; }
+.searchwrap .engine { color: #93A0B4; font-size: 11px; font-weight: 700; border: 1px solid #262D37; padding: 2px 9px; border-radius: 999px; }
+.stats { display: flex; gap: 12px; margin-bottom: 30px; }
+.stat { flex: 1; background: #12161C; border: 1px solid #262D37; border-radius: 13px; padding: 14px 16px; text-align: left; }
+.stat .num { font-size: 22px; font-weight: 800; color: #2DD4BF; }
+.stat .lbl { color: #93A0B4; font-size: 11.5px; }
+.dial { display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px; text-align: left; }
+.dial .cell {
+  display: flex; align-items: center; gap: 10px; background: #12161C; border: 1px solid #262D37;
+  border-radius: 12px; padding: 11px 13px;
+}
+.dial .cell:hover { border-color: #2DD4BF; }
+.dial .fav2 {
+  width: 26px; height: 26px; border-radius: 8px; background: rgba(45,212,191,.12); color: #2DD4BF;
+  display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11px; flex-shrink: 0;
+}
+.dial .t { font-weight: 600; font-size: 12.5px; }
+.dial .s { color: #93A0B4; font-size: 10.5px; }
+.quick { margin-top: 24px; color: #93A0B4; font-size: 12px; }
+kbd { background: #12161C; border: 1px solid #262D37; border-radius: 5px; padding: 1px 7px; font-size: 10.5px; font-family: inherit; }
+svg.ic { width: 15px; height: 15px; stroke: currentColor; stroke-width: 2; fill: none; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="tabs">
+      <div class="tab active"><div class="fav">K</div><div class="t">New Tab</div><div class="x">✕</div></div>
+      <div class="tab"><div class="fav">G</div><div class="t">GitHub — salim77007j</div><div class="x">✕</div></div>
+      <div class="tab"><div class="fav private">P</div><div class="t">Private Tab</div><div class="x">✕</div></div>
+    </div>
+    <div class="newtab">+</div>
+    <div class="spacer"></div>
+    <div class="winbtns">
+      <div class="winbtn">—</div><div class="winbtn">▢</div><div class="winbtn close">✕</div>
+    </div>
+  </div>
+  <div class="toolbar">
+    <div class="btn disabled">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+    </div>
+    <div class="btn">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+    </div>
+    <div class="btn">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 3v6h-6"/></svg>
+    </div>
+    <div class="btn">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v10h14V10"/></svg>
+    </div>
+    <div class="address">
+      <span class="lock">🔒</span>
+      <span class="url">kestrel://newtab</span>
+      <span class="shield"><svg class="ic" style="width:12px;height:12px" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>0</span>
+      <span class="star">★</span>
+    </div>
+    <div class="btn dl-badge">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
+      <span class="badge">2</span>
+    </div>
+    <div class="btn">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </div>
+  </div>
+  <div class="content">
+    <div class="ntp">
+      <div class="logo"><span class="mark">K</span><span>Kestrel <span class="k">Browser</span></span></div>
+      <div class="searchwrap">
+        <svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <span class="ph">Search or enter address</span>
+        <span class="engine">DuckDuckGo</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="num">ON</div><div class="lbl">Tracking protection</div></div>
+        <div class="stat"><div class="num">61,412</div><div class="lbl">Active filter rules</div></div>
+        <div class="stat"><div class="num">38,204</div><div class="lbl">Tracker domains</div></div>
+      </div>
+      <div class="dial">
+        <div class="cell"><span class="fav2">D</span><span><div class="t">DuckDuckGo</div><div class="s">duckduckgo.com</div></span></div>
+        <div class="cell"><span class="fav2">G</span><span><div class="t">GitHub</div><div class="s">github.com</div></span></div>
+        <div class="cell"><span class="fav2">W</span><span><div class="t">Wikipedia</div><div class="s">wikipedia.org</div></span></div>
+        <div class="cell"><span class="fav2">H</span><span><div class="t">Hacker News</div><div class="s">news.ycombinator.com</div></span></div>
+      </div>
+      <div class="quick"><kbd>Ctrl</kbd>+<kbd>T</kbd> new tab · <kbd>Ctrl</kbd>+<kbd>L</kbd> address · <kbd>Ctrl</kbd>+<kbd>D</kbd> bookmark · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> private tab</div>
+    </div>
+  </div>
+</body>
+</html>

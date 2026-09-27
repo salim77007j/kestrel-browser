@@ -69,7 +69,6 @@ pub fn create_tab(
     let findbar = crate::findbar::FindBar::new();
     findbar.attach(&webview);
     content_box.append(&findbar.revealer);
-
     let tab = Rc::new(Tab {
         id,
         webview: webview.clone(),
@@ -93,7 +92,6 @@ pub fn create_tab(
 
     // Close button.
     {
-        let win2 = win.clone();
         let tab2 = tab.clone();
         tab.close_btn.connect_clicked(move |_| {
             if let Some(i) = win2.index_of(&tab2) {
@@ -140,9 +138,11 @@ pub fn apply_settings(state: &Rc<AppState>, settings: &webkit::Settings) {
 fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, webview: &WebView) {
     // --- load lifecycle ---
     {
-        let win2 = win.clone();
+        let win2 = std::rc::Rc::downgrade(win);
         let tab2 = tab.clone();
-        webview.connect_load_changed(move |v, event| match event {
+        webview.connect_load_changed(move |v, event| {
+            let Some(win2) = win2.upgrade() else { return };
+            match event {
             LoadEvent::Started => {
                 tab2.spinner.set_visible(true);
                 tab2.spinner.start();
@@ -168,8 +168,9 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
 
     // --- progress ---
     {
-        let win2 = win.clone();
+        let win2 = std::rc::Rc::downgrade(win);
         webview.connect_estimated_load_progress_notify(move |v| {
+            let Some(win2) = win2.upgrade() else { return };
             let p = v.estimated_load_progress();
             if p < 1.0 {
                 win2.progress.set_visible(true);
@@ -180,9 +181,10 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
 
     // --- uri / title ---
     {
-        let win2 = win.clone();
+        let win2 = std::rc::Rc::downgrade(win);
         let tab2 = tab.clone();
         webview.connect_uri_notify(move |_| {
+            let Some(win2) = win2.upgrade() else { return };
             let uri = tab2.uri();
             tab2.fav_label.set_text(&fav_char(&uri));
             if tab2.private {
@@ -192,9 +194,10 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
         });
     }
     {
-        let win2 = win.clone();
+        let win2 = std::rc::Rc::downgrade(win);
         let tab2 = tab.clone();
         webview.connect_title_notify(move |v| {
+            let Some(win2) = win2.upgrade() else { return };
             let title = v.title().map(|t| t.to_string()).unwrap_or_default();
             tab2.set_title_text(&title);
             win2.refresh_chrome();
@@ -203,8 +206,12 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
 
     // --- navigation policy ---
     {
-        let win2 = win.clone();
+        let win2 = std::rc::Rc::downgrade(win);
         webview.connect_decide_policy(move |_, decision, decision_type| {
+            let Some(win2) = win2.upgrade() else {
+                decision.use_();
+                return glib::Propagation::Proceed;
+            };
             match decision_type {
                 PolicyDecisionType::NavigationAction => {
                     // External schemes -> system handler.
@@ -212,15 +219,21 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
                         .clone()
                         .dynamic_cast::<webkit::NavigationPolicyDecision>()
                     {
-                        let uri = nav.navigation_action().request().uri().to_string();
+                        let uri = nav
+                            .navigation_action()
+                            .and_then(|a| a.request())
+                            .and_then(|r| r.uri())
+                            .map(|u| u.to_string())
+                            .unwrap_or_default();
                         let known = uri.starts_with("http://")
                             || uri.starts_with("https://")
                             || uri.starts_with("kestrel://")
                             || uri.starts_with("file://")
                             || uri.starts_with("about:")
                             || uri.starts_with("data:")
-                            || uri.starts_with("blob:");
-                        if !known {
+                            || uri.starts_with("blob:")
+                            || uri.is_empty();
+                        if !known && !uri.is_empty() {
                             crate::webview::open_external(&uri);
                             decision.ignore();
                             return glib::Propagation::Stop;
@@ -230,18 +243,20 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
                     glib::Propagation::Proceed
                 }
                 PolicyDecisionType::NewWindowAction => {
-                    let uri = decision
+                    let (uri, user_gesture) = decision
                         .clone()
                         .dynamic_cast::<webkit::NavigationPolicyDecision>()
                         .ok()
-                        .map(|nav| nav.navigation_action().request().uri().to_string())
-                        .unwrap_or_default();
-                    let user_gesture = decision
-                        .clone()
-                        .dynamic_cast::<webkit::NavigationPolicyDecision>()
-                        .ok()
-                        .map(|nav| nav.navigation_action().is_user_gesture())
-                        .unwrap_or(false);
+                        .and_then(|nav| nav.navigation_action())
+                        .map(|a| {
+                            let uri = a
+                                .request()
+                                .and_then(|r| r.uri())
+                                .map(|u| u.to_string())
+                                .unwrap_or_default();
+                            (uri, a.is_user_gesture())
+                        })
+                        .unwrap_or((String::new(), false));
                     if user_gesture {
                         win2.new_tab(&normalize_uri(&uri), true, false);
                         decision.ignore();
@@ -268,18 +283,25 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
 
     // --- window.open / target=_blank -> new tab ---
     {
-        let win2 = win.clone();
+        let win2 = std::rc::Rc::downgrade(win);
         webview.connect_create(move |_, action| {
-            let uri = action.request().uri().to_string();
+            let Some(win2) = win2.upgrade() else { return None };
+            let uri = action
+                .request()
+                .and_then(|r| r.uri())
+                .map(|u| u.to_string())
+                .unwrap_or_default();
             let tab = win2.new_tab(&normalize_uri(&uri), false, false);
-            Some(tab.webview.clone().upcast::<gtk::Widget>())
+            let widget: gtk::Widget = tab.webview.clone().upcast();
+            Some(widget)
         });
     }
 
     // --- custom context menu ---
     {
-        let win2 = win.clone();
+        let win2 = std::rc::Rc::downgrade(win);
         webview.connect_context_menu(move |_, _menu, hit| {
+            let Some(win2) = win2.upgrade() else { return true };
             let is_link = hit.context_is_link();
             let link = hit.link_uri().map(|u| u.to_string()).unwrap_or_default();
             crate::menus::show_web_context_menu(&win2, is_link, &link);
@@ -306,8 +328,9 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
 
     // --- mouse target -> status bar ---
     {
-        let win2 = win.clone();
+        let win2 = std::rc::Rc::downgrade(win);
         webview.connect_mouse_target_changed(move |_, hit, _| {
+            let Some(win2) = win2.upgrade() else { return };
             if hit.context_is_link() {
                 let uri = hit.link_uri().map(|u| u.to_string()).unwrap_or_default();
                 win2.show_status(&uri);
@@ -321,9 +344,10 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
     {
         let state2 = state.clone();
         let tab2 = tab.clone();
-        let win2 = win.clone();
+        let win2 = std::rc::Rc::downgrade(win);
         webview.connect_resource_load_started(move |_, _resource, request| {
-            let uri = request.uri().to_string();
+            let Some(win2) = win2.upgrade() else { return };
+            let uri = request.uri().map(|u| u.to_string()).unwrap_or_default();
             if state2.shield.borrow().is_tracker(&uri) {
                 tab2.shield_hits.set(tab2.shield_hits.get() + 1);
                 win2.refresh_chrome();
@@ -333,8 +357,9 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
 
     // --- load failures (TLS, network) ---
     {
-        let win2 = win.clone();
-        webview.connect_load_failed(move |v, _event, error| {
+        let win2 = std::rc::Rc::downgrade(win);
+        webview.connect_load_failed(move |_v, _event, _uri, error| {
+            let Some(win2) = win2.upgrade() else { return false };
             let msg = error.to_string();
             if msg.to_lowercase().contains("certificate") || msg.to_lowercase().contains("tls") {
                 win2.show_status("TLS certificate error — connection blocked");
@@ -342,16 +367,16 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
             } else {
                 win2.show_status(&format!("Load failed: {msg}"));
             }
-            let _ = v;
             false // let WebKit show its error page
         });
     }
 
     // --- web process crash ---
     {
-        let win2 = win.clone();
+        let win2 = std::rc::Rc::downgrade(win);
         let tab2 = tab.clone();
         webview.connect_web_process_terminated(move |_, reason| {
+            let Some(win2) = win2.upgrade() else { return };
             let msg = match reason {
                 webkit::WebProcessTerminationReason::ExceededMemoryLimit => {
                     "Page crashed: out of memory".to_string()

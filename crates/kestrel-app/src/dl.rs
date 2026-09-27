@@ -2,7 +2,7 @@
 
 use crate::state::AppState;
 use gtk::prelude::*;
-use gtk::glib;
+use gtk::{gio, glib};
 use std::cell::Cell;
 use std::rc::Rc;
 use webkit::prelude::*;
@@ -15,10 +15,6 @@ impl DownloadCenter {
     pub fn new() -> Self {
         Self { active_count: Cell::new(0) }
     }
-
-    pub fn note_tracker(&self) {
-        self.active_count.set(self.active_count.get());
-    }
 }
 
 impl Default for DownloadCenter {
@@ -28,22 +24,21 @@ impl Default for DownloadCenter {
 }
 
 pub fn install(state: &Rc<AppState>) {
-    // download-started exists on both NetworkSession and WebContext; the
-    // session carries the real downloads in the 6.0 API.
     state.session.connect_download_started(glib::clone!(
         #[weak]
         state,
-        move |download| {
-            let request = download.request();
-            let uri = request.uri().to_string();
+        move |_session, download| {
+            let uri = download
+                .request()
+                .and_then(|r| r.uri())
+                .map(|u| u.to_string())
+                .unwrap_or_default();
             let suggested = suggested_filename(&uri);
 
-            // Insert DB row.
             let id = kestrel_data::downloads::insert(&state.db.borrow(), &uri, &suggested);
             state.downloads.active_count.set(state.downloads.active_count.get() + 1);
             update_badge(&state);
 
-            // Destination policy.
             let ask = state.settings.borrow().ask_download_location;
             let dest_dir = state.settings.borrow().downloads_dir.clone();
             if ask {
@@ -80,12 +75,11 @@ pub fn install(state: &Rc<AppState>) {
                 );
             }
 
-            // Progress + completion.
             {
                 let state2 = state.clone();
                 let id2 = id;
                 download.connect_received_data(move |d, _| {
-                    let received = d.received_data_length();
+                    let received = d.received_data_length() as i64;
                     let total = (d.estimated_progress() * 1_000_000.0) as i64;
                     kestrel_data::downloads::update(&state2.db.borrow(), id2, "", "active", received, total);
                 });
@@ -95,7 +89,7 @@ pub fn install(state: &Rc<AppState>) {
                 let id2 = id;
                 let dest = download.destination().map(|d| d.to_string()).unwrap_or_default();
                 download.connect_finished(move |d| {
-                    let received = d.received_data_length();
+                    let received = d.received_data_length() as i64;
                     kestrel_data::downloads::update(&state2.db.borrow(), id2, &dest, "done", received, received);
                     state2.downloads.active_count.set(state2.downloads.active_count.get().saturating_sub(1));
                     update_badge(&state2);
@@ -136,6 +130,7 @@ fn suggested_filename(uri: &str) -> String {
 fn update_badge(state: &Rc<AppState>) {
     let n = state.downloads.active_count.get();
     if let Some(w) = state.main_window() {
-        w.downloads_badge.set_text(if n > 0 { &n.to_string() } else { "" });
+        let text = if n > 0 { n.to_string() } else { String::new() };
+        w.downloads_badge.set_text(&text);
     }
 }

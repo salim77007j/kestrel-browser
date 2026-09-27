@@ -21,6 +21,8 @@ mod webview;
 mod window;
 
 use std::cell::RefCell;
+use std::rc::Rc;
+use gtk::prelude::*;
 
 const APP_ID: &str = "io.kestrel.Browser";
 

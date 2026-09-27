@@ -18,7 +18,7 @@ pub struct Tab {
     pub webview: WebView,
     pub ucm: webkit::UserContentManager,
     pub content_box: gtk::Box,
-    pub findbar: crate::findbar::FindBar,
+    pub findbar: std::rc::Rc<crate::findbar::FindBar>,
     pub button: gtk::ToggleButton,
     pub title_label: gtk::Label,
     pub fav_label: gtk::Label,

@@ -2,6 +2,7 @@
 
 use crate::state::AppState;
 use gtk::prelude::*;
+use gtk::glib::prelude::*;
 use gtk::{glib, Entry, EventControllerKey, Popover, ListBox, ListBoxRow};
 use std::rc::Rc;
 
@@ -148,7 +149,9 @@ impl AddressBar {
         // Row click -> navigate.
         let this5 = self.clone();
         self.list.connect_row_activated(glib::clone!(#[weak] this5, move |_, row| {
-            if let Some(uri) = row.widget_name().map(|s| s.to_string()) {
+            let name = row.widget_name();
+            let uri = name.to_string();
+            if !uri.is_empty() {
                 this5.navigate(&uri);
             }
         }));
@@ -186,8 +189,11 @@ impl AddressBar {
     }
 
     fn refresh_suggestions(&self, text: &str) {
-        for child in self.list.observe_children().snapshot::<gtk::Widget>() {
-            self.list.remove(&child.downcast::<ListBoxRow>().unwrap());
+        let mut child = self.list.first_child();
+        while let Some(c) = child {
+            let next = c.next_sibling();
+            self.list.remove(&c);
+            child = next;
         }
 
         let suggestions = self.collect_suggestions(text);
@@ -321,17 +327,17 @@ impl AddressBar {
             return;
         }
         if lookalike {
-            self.sec_icon.set_from_icon_name(Some("channel-insecure-symbolic"));
+            self.sec_icon.set_icon_name(Some("channel-insecure-symbolic"));
             self.sec_icon.add_css_class("warn");
             self.sec_icon.remove_css_class("secure");
             self.sec_icon.set_tooltip_text(Some("Possible lookalike domain (punycode). Check carefully!"));
         } else if secure {
-            self.sec_icon.set_from_icon_name(Some("changes-prevent-symbolic"));
+            self.sec_icon.set_icon_name(Some("changes-prevent-symbolic"));
             self.sec_icon.remove_css_class("warn");
             self.sec_icon.add_css_class("secure");
             self.sec_icon.set_tooltip_text(Some("Connection is secure (HTTPS)"));
         } else {
-            self.sec_icon.set_from_icon_name(Some("channel-insecure-symbolic"));
+            self.sec_icon.set_icon_name(Some("channel-insecure-symbolic"));
             self.sec_icon.remove_css_class("secure");
             self.sec_icon.add_css_class("warn");
             self.sec_icon.set_tooltip_text(Some("Not secure (HTTP)"));
@@ -339,8 +345,9 @@ impl AddressBar {
     }
 
     pub fn set_star(&self, active: bool) {
-        let icon = self.star.first_child().and_downcast::<gtk::Image>().unwrap();
-        icon.set_from_icon_name(Some(if active { "starred-symbolic" } else { "star-symbolic" }));
+        if let Some(icon) = self.star.first_child().and_downcast::<gtk::Image>() {
+            icon.set_icon_name(Some(if active { "starred-symbolic" } else { "star-symbolic" }));
+        }
         if active {
             self.star.add_css_class("active");
         } else {
@@ -351,5 +358,18 @@ impl AddressBar {
     pub fn set_shield_count(&self, n: u64) {
         self.shield_btn.set_visible(true);
         self.shield_label.set_text(&n.to_string());
+    }
+}
+
+impl glib::clone::Downgrade for AddressBar {
+    type Weak = std::rc::Weak<AddressBar>;
+    fn downgrade(&self) -> Self::Weak {
+        std::rc::Weak::downgrade(self)
+    }
+}
+impl glib::clone::Upgrade for std::rc::Weak<AddressBar> {
+    type Strong = std::rc::Rc<AddressBar>;
+    fn upgrade(&self) -> Option<Self::Strong> {
+        std::rc::Weak::upgrade(self)
     }
 }

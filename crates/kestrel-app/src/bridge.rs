@@ -24,17 +24,16 @@ pub fn register_handlers(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc
         if !registered {
             eprintln!("kestrel: failed to register kestrelHost handler");
         }
-        {
-            let state2 = state.clone();
-            let win2 = win.clone();
-            ucm.connect_script_message_received(
-                Some("kestrelHost"),
-                move |_, value| {
-                    let raw = value.to_str().to_string();
-                    handle_command(&state2, &win2, &raw);
-                },
-            );
-        }
+        let weak_win = std::rc::Rc::downgrade(win);
+        let state2 = state.clone();
+        ucm.connect_script_message_received(
+            Some("kestrelHost"),
+            move |_, value| {
+                let Some(win2) = weak_win.upgrade() else { return };
+                let raw = value.to_str().to_string();
+                handle_command(&state2, &win2, &raw);
+            },
+        );
     }
 
     // ---- credential capture (all web views, opt-in vault) ----

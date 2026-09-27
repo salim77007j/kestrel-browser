@@ -72,7 +72,9 @@ impl AppState {
         } else {
             webkit::CookieAcceptPolicy::Always
         };
-        session.cookie_manager().set_accept_policy(cookie_policy);
+        if let Some(cm) = session.cookie_manager() {
+            cm.set_accept_policy(cookie_policy);
+        }
 
         let this = Rc::new(Self {
             settings: RefCell::new(settings),
@@ -115,7 +117,7 @@ impl AppState {
         });
     }
 
-    fn handle_worker_msg(&self, msg: WorkerMsg) {
+    fn handle_worker_msg(self: &Rc<Self>, msg: WorkerMsg) {
         match msg {
             WorkerMsg::FiltersLoaded { engine, hosts, cb_json, statuses } => {
                 self.on_filters_loaded(engine, hosts, cb_json, statuses);
@@ -183,7 +185,7 @@ impl AppState {
     }
 
     fn on_filters_loaded(
-        &self,
+        self: &Rc<Self>,
         engine: Option<Arc<PrivacyEngine>>,
         hosts: Vec<String>,
         cb_json: String,
@@ -199,33 +201,31 @@ impl AppState {
         let _ = std::fs::create_dir_all(&store_path);
         let store = webkit::UserContentFilterStore::new(store_path.to_string_lossy().as_ref());
         let bytes = glib::Bytes::from(cb_json.as_bytes());
+        let weak = Rc::downgrade(self);
         store.save(
             "kestrel-blocklists",
             &bytes,
             None::<&gtk::gio::Cancellable>,
-            glib::clone!(
-                #[weak(rename_to = state)]
-                self,
-                move |res| {
-                    match res {
-                        Ok(filter) => {
-                            state.filters_active.store(true, Ordering::SeqCst);
-                            state.filter_compile_ok.set(true);
-                            for w in state.windows.borrow().iter() {
-                                w.attach_network_filter(&filter);
-                            }
-                            *state.network_filter.borrow_mut() = Some(filter);
+            move |res| {
+                let Some(state) = weak.upgrade() else { return };
+                match res {
+                    Ok(filter) => {
+                        state.filters_active.store(true, Ordering::SeqCst);
+                        state.filter_compile_ok.set(true);
+                        for w in state.windows.borrow().iter() {
+                            w.attach_network_filter(&filter);
                         }
-                        Err(e) => {
-                            state.filter_compile_ok.set(false);
-                            eprintln!("kestrel: filter compile failed: {e}");
-                        }
+                        *state.network_filter.borrow_mut() = Some(filter);
                     }
-                    for w in state.windows.borrow().iter() {
-                        w.refresh_internal_pages();
+                    Err(e) => {
+                        state.filter_compile_ok.set(false);
+                        eprintln!("kestrel: filter compile failed: {e}");
                     }
                 }
-            ),
+                for w in state.windows.borrow().iter() {
+                    w.refresh_internal_pages();
+                }
+            },
         );
     }
 
@@ -245,14 +245,15 @@ impl AppState {
             kestrel_data::history::clear_all(&self.db.borrow());
         }
         if cookies {
-            let cm = self.session.cookie_manager();
-            let _ = glib::spawn_future_local(async move {
-                if let Ok(cookies) = cm.all_cookies_future().await {
-                    for c in cookies {
-                        let _ = cm.delete_cookie_future(&c).await;
+            if let Some(cm) = self.session.cookie_manager() {
+                let _ = glib::spawn_future_local(async move {
+                    if let Ok(cookies) = cm.all_cookies_future().await {
+                        for c in cookies {
+                            let _ = cm.delete_cookie_future(&c).await;
+                        }
                     }
-                }
-            });
+                });
+            }
         }
         if permissions {
             kestrel_data::permissions::clear(&self.db.borrow());
@@ -263,5 +264,18 @@ impl AppState {
 
     pub fn save_settings(&self) {
         let _ = self.settings.borrow().save();
+    }
+}
+
+impl glib::clone::Downgrade for AppState {
+    type Weak = std::rc::Weak<AppState>;
+    fn downgrade(&self) -> Self::Weak {
+        std::rc::Weak::downgrade(self)
+    }
+}
+impl glib::clone::Upgrade for std::rc::Weak<AppState> {
+    type Strong = std::rc::Rc<AppState>;
+    fn upgrade(&self) -> Option<Self::Strong> {
+        std::rc::Weak::upgrade(self)
     }
 }
