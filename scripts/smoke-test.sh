@@ -12,6 +12,11 @@ echo "== Kestrel smoke test =="
 "$BIN" --version
 
 export DISPLAY=:99
+# WebKit's bubblewrap sandbox cannot configure networking inside the
+# restricted GitHub Actions container; disable it for CI evidence runs only
+# (packaged product builds keep the sandbox enabled).
+export WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
+export GTK_A11Y=none
 Xvfb :99 -screen 0 1440x900x24 &
 XVFB_PID=$!
 sleep 1.5

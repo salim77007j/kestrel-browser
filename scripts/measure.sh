@@ -8,6 +8,11 @@ OUTCSV="${2:-smoke/metrics.csv}"
 mkdir -p "$(dirname "$OUTCSV")"
 
 export DISPLAY=:99
+# WebKit's bubblewrap sandbox cannot configure networking inside the
+# restricted GitHub Actions container; disable it for CI evidence runs only
+# (packaged product builds keep the sandbox enabled).
+export WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
+export GTK_A11Y=none
 pkill -f "Xvfb :99" 2>/dev/null || true
 Xvfb :99 -screen 0 1440x900x24 &
 sleep 1.5
