@@ -4,13 +4,13 @@ use kestrel_data::{
     BookmarksStore, DownloadsStore, HistoryStore, PermissionStore, SessionState, Settings,
     ShortcutsStore,
 };
-use kestrel_privacy::{PrivacyEngine, SafeBrowsing};
+use kestrel_privacy::SafeBrowsing;
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Everything the chrome UI needs to render the tab strip.
 #[derive(Debug, Clone, Serialize)]
@@ -45,7 +45,7 @@ pub struct Stats {
 }
 
 impl Stats {
-    fn new_today() -> Self {
+    pub(crate) fn new_today() -> Self {
         let day = chrono_day();
         Self {
             day,
@@ -93,7 +93,8 @@ pub fn chrono_day() -> String {
 pub struct AppState {
     pub data_dir: PathBuf,
     pub settings: RwLock<Settings>,
-    pub engine: RwLock<Option<Arc<PrivacyEngine>>>,
+    pub engine: RwLock<Option<crate::engine_host::PrivacyClient>>,
+    pub engine_rules: AtomicUsize,
     /// Hosts extracted from EasyPrivacy (for "trackers blocked" stats).
     pub tracker_hosts: RwLock<Arc<HashSet<String>>>,
     pub safebrowsing: RwLock<Arc<SafeBrowsing>>,
@@ -154,38 +155,44 @@ impl AppState {
             };
         session.tabs = restore_tabs;
 
+        // Build every store up-front (dir is moved into the struct below).
+        let history = HistoryStore::new(kestrel_data::JsonStore::new(dir.join("history.json")));
+        let bookmarks =
+            BookmarksStore::new(kestrel_data::JsonStore::new(dir.join("bookmarks.json")));
+        let downloads =
+            DownloadsStore::new(kestrel_data::JsonStore::new(dir.join("downloads.json")));
+        let shortcuts =
+            ShortcutsStore::new(kestrel_data::JsonStore::new(dir.join("shortcuts.json")));
+        let permissions =
+            PermissionStore::new(kestrel_data::JsonStore::new(dir.join("permissions.json")));
+        let stats = crate::stats::load_stats(&dir);
+        let safebrowsing = load_safebrowsing(&dir);
+        let zoom_by_host = load_zooms(&dir);
+
         Ok(Self {
             data_dir: dir,
             settings: RwLock::new(settings),
             engine: RwLock::new(None),
             tracker_hosts: RwLock::new(Arc::new(HashSet::new())),
-            safebrowsing: RwLock::new(Arc::new(load_safebrowsing(&dir))),
+            safebrowsing: RwLock::new(Arc::new(safebrowsing)),
             allowed_dangerous: RwLock::new(HashSet::new()),
-            history: Mutex::new(HistoryStore::new(kestrel_data::JsonStore::new(
-                dir.join("history.json"),
-            ))),
-            bookmarks: Mutex::new(BookmarksStore::new(kestrel_data::JsonStore::new(
-                dir.join("bookmarks.json"),
-            ))),
-            downloads: Mutex::new(DownloadsStore::new(kestrel_data::JsonStore::new(
-                dir.join("downloads.json"),
-            ))),
+            history: Mutex::new(history),
+            bookmarks: Mutex::new(bookmarks),
+            downloads: Mutex::new(downloads),
             session: Mutex::new(session),
-            shortcuts: Mutex::new(ShortcutsStore::new(kestrel_data::JsonStore::new(
-                dir.join("shortcuts.json"),
-            ))),
-            permissions: Mutex::new(PermissionStore::new(kestrel_data::JsonStore::new(
-                dir.join("permissions.json"),
-            ))),
-            stats: Mutex::new(stats::load_stats(&dir)),
+            shortcuts: Mutex::new(shortcuts),
+            permissions: Mutex::new(permissions),
+            stats: Mutex::new(stats),
             tabs: Mutex::new(Vec::new()),
             active_tab: Mutex::new(None),
+            engine_rules: AtomicUsize::new(0),
             next_tab: AtomicU64::new(1),
             chrome_height: AtomicU32::new(118),
             fp_seed: rand_seed(),
             engine_ready: AtomicBool::new(false),
             pending_permissions: Mutex::new(HashMap::new()),
-            zoom_by_host: Mutex::new(load_zooms(&dir)),
+            active_downloads: Mutex::new(HashMap::new()),
+            zoom_by_host: Mutex::new(zoom_by_host),
         })
     }
 

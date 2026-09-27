@@ -9,26 +9,26 @@ pub mod windows_impl {
     use tauri::Webview;
     use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2, ICoreWebView2_4};
     use windows::core::Interface;
-    use windows::Win32::Foundation::BOOL;
+    use windows::core::BOOL;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
 
     fn with_core<F>(webview: &Webview<tauri::Wry>, f: F) -> bool
     where
-        F: FnOnce(&ICoreWebView2) -> bool,
+        F: FnOnce(&ICoreWebView2) -> bool + Send + 'static,
     {
-        let mut ok = false;
-        let cell = std::sync::Mutex::new(&mut ok);
+        let ok = Arc::new(AtomicBool::new(false));
+        let flag = ok.clone();
         let _ = webview.with_webview(move |platform| {
-            match unsafe { platform.controller.CoreWebView2() } {
+            match unsafe { platform.controller().CoreWebView2() } {
                 Ok(core) => {
                     let r = f(&core);
-                    if let Ok(mut c) = cell.lock() {
-                        **c = r;
-                    }
+                    flag.store(r, Ordering::SeqCst);
                 }
                 Err(_) => {}
             }
         });
-        ok
+        ok.load(Ordering::SeqCst)
     }
 
     pub fn go_back(webview: &Webview<tauri::Wry>) -> bool {
@@ -60,19 +60,12 @@ pub mod windows_impl {
 
     /// Mute a tab through ICoreWebView2_4::SetIsMuted.
     pub fn set_muted(webview: &Webview<tauri::Wry>, muted: bool) -> bool {
-        let mut ok = false;
-        let cell = std::sync::Mutex::new(&mut ok);
-        let _ = webview.with_webview(move |platform| {
-            if let Ok(core) = unsafe { platform.controller.CoreWebView2() } {
-                if let Ok(core4) = core.cast::<ICoreWebView2_4>() {
-                    let r = unsafe { core4.SetIsMuted(muted.into()) };
-                    if let Ok(mut c) = cell.lock() {
-                        **c = r.is_ok();
-                    }
-                }
+        with_core(webview, |core| {
+            match core.cast::<ICoreWebView2_4>() {
+                Ok(core4) => unsafe { core4.SetIsMuted(muted.into()).is_ok() },
+                Err(_) => false,
             }
-        });
-        ok
+        })
     }
 }
 

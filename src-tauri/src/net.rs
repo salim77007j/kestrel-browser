@@ -4,6 +4,7 @@
 use crate::state::{now_ms, AppState, CHROME_LABEL};
 use base64::Engine as _;
 use serde_json::json;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -51,7 +52,7 @@ pub fn ensure_favicon(app: AppHandle, url: &str) {
         return;
     }
     std::thread::spawn(move || {
-        let scheme = if parsed.scheme_str() == Some("http") { "http" } else { "https" };
+        let scheme = if parsed.scheme() == "http" { "http" } else { "https" };
         let candidates = [
             format!("{scheme}://{host}/favicon.ico"),
             format!("https://{host}/favicon.ico"),

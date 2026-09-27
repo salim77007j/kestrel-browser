@@ -8,7 +8,6 @@ use crate::state::{now_ms, AppState, TabMeta, CHROME_LABEL};
 use crate::tabs;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, State};
-use tauri::webview::PageLoadEvent;
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -29,13 +28,7 @@ pub fn init_ui(app: AppHandle) -> Value {
         let b = s.bookmarks.lock().unwrap();
         json!({"bar": b.bar(), "other": b.other()})
     };
-    let engine_rules = s
-        .engine
-        .read()
-        .unwrap()
-        .as_ref()
-        .map(|e| e.rule_count())
-        .unwrap_or(0);
+    let engine_rules = s.engine_rules.load(std::sync::atomic::Ordering::SeqCst);
     let stats = s.stats.lock().unwrap();
     json!({
         "tabs": tabs.tabs,
@@ -411,7 +404,8 @@ pub fn clear_history(app: AppHandle) -> Result<()> {
 #[tauri::command]
 pub fn list_downloads(app: AppHandle) -> Value {
     let s = state(&app);
-    serde_json::to_value(s.downloads.lock().unwrap().list().to_vec()).unwrap_or(json!([]))
+    let items = { s.downloads.lock().unwrap().list().to_vec() };
+    serde_json::to_value(items).unwrap_or(json!([]))
 }
 
 #[tauri::command]
@@ -426,7 +420,8 @@ pub fn cancel_download(app: AppHandle, id: u64) -> Result<()> {
 }
 
 fn list_downloads_inner(s: &State<AppState>) -> Value {
-    serde_json::to_value(s.downloads.lock().unwrap().list().to_vec()).unwrap_or(json!([]))
+    let items = { s.downloads.lock().unwrap().list().to_vec() };
+    serde_json::to_value(items).unwrap_or(json!([]))
 }
 
 #[tauri::command]
@@ -486,7 +481,8 @@ pub fn show_in_folder(app: AppHandle, id: u64) -> Result<()> {
 #[tauri::command]
 pub fn get_settings(app: AppHandle) -> Value {
     let s = state(&app);
-    serde_json::to_value(&*s.settings.read().unwrap()).unwrap_or(json!({}))
+    let snapshot = { s.settings.read().unwrap().clone() };
+    serde_json::to_value(&snapshot).unwrap_or(json!({}))
 }
 
 #[tauri::command]
@@ -553,13 +549,7 @@ pub async fn update_filter_lists_now(app: AppHandle) -> Result<String> {
 pub fn get_adblock_stats(app: AppHandle) -> Value {
     let s = state(&app);
     let stats = s.stats.lock().unwrap();
-    let rules = s
-        .engine
-        .read()
-        .unwrap()
-        .as_ref()
-        .map(|e| e.rule_count())
-        .unwrap_or(0);
+    let rules = s.engine_rules.load(std::sync::atomic::Ordering::SeqCst);
     let top: Vec<Value> = stats
         .per_domain
         .iter()
@@ -584,7 +574,7 @@ pub fn run_privacy_selftest(app: AppHandle) -> Value {
     let s = state(&app);
     let engine = s.engine.read().unwrap().clone();
     let mut results: Vec<Value> = Vec::new();
-    let check = |name: &str, ok: bool, detail: &str| {
+    let mut check = |name: &str, ok: bool, detail: &str| {
         results.push(json!({"name": name, "pass": ok, "detail": detail}))
     };
 
@@ -596,15 +586,15 @@ pub fn run_privacy_selftest(app: AppHandle) -> Value {
                 "script",
             );
             check("network block: ad server", blocked, "doubleclick.net script");
-            let ok = !eng.should_block("https://news.example.com/article", "https://news.example.com/", "document");
-            check("first-party passes", ok, "news.example.com document");
-            let c = eng.cosmetic("https://news.example.com/");
-            check(
-                "cosmetic engine attached",
-                eng.rule_count() > 10_000,
-                &format!("{} rules loaded", eng.rule_count()),
+            let ok = !eng.should_block(
+                "https://news.example.com/article",
+                "https://news.example.com/",
+                "document",
             );
-            let _ = c;
+            check("first-party passes", ok, "news.example.com document");
+            let rules = s.engine_rules.load(std::sync::atomic::Ordering::SeqCst);
+            check("cosmetic engine attached", rules > 10_000, &format!("{rules} rules loaded"));
+            let _ = eng;
         }
         None => check("engine", false, "engine not ready yet"),
     }
@@ -1037,8 +1027,3 @@ fn handle_save_chunk(app: &AppHandle, event: Value) {
     }
 }
 
-// keep imports used
-#[allow(unused)]
-fn _unused(wv: tauri::Webview<tauri::Wry>, e: PageLoadEvent) {
-    let _ = (wv, e);
-}

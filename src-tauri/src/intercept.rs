@@ -139,8 +139,8 @@ pub fn handle_request(
 
     let mut blocked = false;
     if adblock_on {
-        let engine = state.engine.read().unwrap().clone();
-        if let Some(eng) = engine.as_ref() {
+        let client = state.engine.read().unwrap().clone();
+        if let Some(eng) = client {
             blocked = eng.should_block(url.as_str(), &source, rtype);
         }
     }
@@ -343,8 +343,8 @@ pub fn inject_cosmetic(app: &AppHandle, tab_id: &str, url: &str) {
     if !state.settings.read().unwrap().adblock_enabled {
         return;
     }
-    let engine = state.engine.read().unwrap().clone();
-    if let Some(eng) = engine {
+    let client = state.engine.read().unwrap().clone();
+    if let Some(eng) = client {
         let cosmetic = eng.cosmetic(url);
         if let Some(wv) = app.get_webview(tab_id) {
             if !cosmetic.hide_css.is_empty() {

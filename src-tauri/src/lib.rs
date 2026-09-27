@@ -16,7 +16,7 @@ mod stats;
 mod tabs;
 
 use state::AppState;
-use tauri::{Manager, WindowEvent};
+use tauri::{Listener, Manager, WindowEvent};
 
 pub fn run() {
     let builder = tauri::Builder::default()

@@ -9,8 +9,8 @@ use crate::bridge;
 use crate::intercept;
 use crate::state::{now_ms, AppState, TabMeta, CHROME_LABEL};
 use kestrel_data::GroupInfo;
-use tauri::webview::{DownloadEvent, PageLoadEvent, WebviewUrl, WebviewBuilder};
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Webview};
+use tauri::webview::{DownloadEvent, WebviewBuilder};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Webview, WebviewUrl};
 
 pub const HOME_PAGE: &str = "pages/newtab.html";
 
@@ -28,7 +28,8 @@ pub fn create_main_window(app: &AppHandle) -> tauri::Result<()> {
     // the frontend reports its real height via set_chrome_height.
     let state = app.state::<AppState>();
     let chrome_h = state.chrome_height.load(std::sync::atomic::Ordering::SeqCst) as f64;
-    let size = window.inner_size()?.to_logical(window.scale_factor());
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let size = window.inner_size()?.to_logical(scale);
     let chrome = WebviewBuilder::new(CHROME_LABEL, WebviewUrl::App("chrome.html".into()))
         .initialization_script(bridge::chrome_init());
     window.add_child(
@@ -38,25 +39,9 @@ pub fn create_main_window(app: &AppHandle) -> tauri::Result<()> {
     )?;
 
     // Restore session tabs or start with the home page.
-    let restored: Vec<TabMeta> = {
+    let restored: Vec<kestrel_data::TabState> = {
         let session = state.session.lock().unwrap();
-        session
-            .tabs
-            .iter()
-            .map(|t| TabMeta {
-                id: String::new(),
-                url: t.url.clone(),
-                title: t.title.clone(),
-                pinned: t.pinned,
-                muted: t.muted,
-                loading: false,
-                can_back: false,
-                can_forward: false,
-                zoom: t.zoom,
-                group: t.group.clone(),
-                favicon: None,
-            })
-            .collect()
+        session.tabs.clone()
     };
 
     if restored.is_empty() {
@@ -133,7 +118,7 @@ pub fn force_quit(app: &AppHandle) {
         session.clean_exit = true;
         session.save(&kestrel_data::JsonStore::new(state.data_dir.join("session.json")));
     }
-    crate::stats::save_stats(state);
+    crate::stats::save_stats(&state);
     app.exit(0);
 }
 

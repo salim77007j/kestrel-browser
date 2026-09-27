@@ -1,12 +1,69 @@
-//! Privacy engine lifecycle: background build from bundled seeds + cached
-//! lists + custom filters, settings-driven rebuilds, remote list updates.
+//! Privacy engine lifecycle: a thread-confined actor owns the adblock
+//! engine (it holds `Rc` internally and cannot cross threads). The shell
+//! talks to it through a channel-based client that is cheap to clone and
+//! fully `Send + Sync`.
 
 use crate::state::{include_gz_lines, AppState};
+use kestrel_privacy::engine::CosmeticResult;
 use kestrel_privacy::PrivacyEngine;
 use serde_json::json;
 use std::collections::HashSet;
+use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
+
+/// One job for the engine actor.
+pub enum Job {
+    Block {
+        url: String,
+        source: String,
+        rtype: &'static str,
+        resp: Sender<bool>,
+    },
+    Cosmetic {
+        url: String,
+        resp: Sender<CosmeticResult>,
+    },
+}
+
+/// Cloneable handle to the engine actor. `Sender` is Send + Sync as long as
+/// `Job` is Send.
+#[derive(Clone)]
+pub struct PrivacyClient {
+    tx: Sender<Job>,
+}
+
+impl PrivacyClient {
+    pub fn should_block(&self, url: &str, source: &str, rtype: &'static str) -> bool {
+        let (tx, rx) = channel();
+        let job = Job::Block {
+            url: url.to_string(),
+            source: source.to_string(),
+            rtype,
+            resp: tx,
+        };
+        if self.tx.send(job).is_err() {
+            return false;
+        }
+        // bounded wait: fail-open if the engine is momentarily busy
+        rx.recv_timeout(Duration::from_millis(250)).unwrap_or(false)
+    }
+
+    pub fn cosmetic(&self, url: &str) -> CosmeticResult {
+        let (tx, rx) = channel();
+        let job = Job::Cosmetic {
+            url: url.to_string(),
+            resp: tx,
+        };
+        if self.tx.send(job).is_ok() {
+            if let Ok(r) = rx.recv_timeout(Duration::from_millis(250)) {
+                return r;
+            }
+        }
+        CosmeticResult::default()
+    }
+}
 
 /// Bundled offline seed lists (so the very first launch is fully protected).
 struct Seed {
@@ -52,10 +109,7 @@ fn compose_rules(state: &AppState) -> (Vec<String>, HashSet<String>) {
         let cached = state.data_dir.join("filters").join(format!("{}.txt", seed.id));
         let text = match std::fs::read_to_string(&cached) {
             Ok(t) if !t.is_empty() => t,
-            _ => {
-                let lines = include_gz_lines(seed.gz);
-                lines.join("\n")
-            }
+            _ => include_gz_lines(seed.gz).join("\n"),
         };
         if seed.tracker_list {
             trackers.extend(extract_hosts(&text));
@@ -63,7 +117,7 @@ fn compose_rules(state: &AppState) -> (Vec<String>, HashSet<String>) {
         rules.push(text);
     }
 
-    // urlhaus safe-browsing feed: update the copy the interstitial uses
+    // urlhaus safe-browsing feed: keep a plain-text copy for the interstitial
     {
         let cached = state.data_dir.join("filters").join("urlhaus.txt");
         if !cached.exists() {
@@ -88,11 +142,7 @@ fn extract_hosts(text: &str) -> HashSet<String> {
         if let Some(rest) = line.strip_prefix("||") {
             let end = rest.find(['^', '/', '$', ':', '?', '*']).unwrap_or(rest.len());
             let host = &rest[..end];
-            if !host.is_empty()
-                && !host.contains('*')
-                && host.contains('.')
-                && !host.starts_with('-')
-            {
+            if !host.is_empty() && !host.contains('*') && host.contains('.') && !host.starts_with('-') {
                 hosts.insert(host.to_ascii_lowercase());
             }
         }
@@ -100,7 +150,7 @@ fn extract_hosts(text: &str) -> HashSet<String> {
     hosts
 }
 
-/// Build the engine in a background thread and swap it in when ready.
+/// Build the engine in a background thread and swap the client in when ready.
 pub fn spawn_engine_build(app: AppHandle) {
     std::thread::spawn(move || {
         build_and_swap(&app);
@@ -113,7 +163,21 @@ pub fn build_and_swap(app: &AppHandle) {
     match PrivacyEngine::from_rules(&rules) {
         Ok(engine) => {
             let count = engine.rule_count();
-            *state.engine.write().unwrap() = Some(Arc::new(engine));
+            let (tx, rx) = channel::<Job>();
+            std::thread::spawn(move || {
+                // the engine lives on THIS thread only
+                while let Ok(job) = rx.recv() {
+                    match job {
+                        Job::Block { url, source, rtype, resp } => {
+                            let _ = resp.send(engine.should_block(&url, &source, rtype));
+                        }
+                        Job::Cosmetic { url, resp } => {
+                            let _ = resp.send(engine.cosmetic(&url));
+                        }
+                    }
+                }
+            });
+            *state.engine.write().unwrap() = Some(PrivacyClient { tx });
             *state.tracker_hosts.write().unwrap() = Arc::new(trackers);
             state.engine_ready.store(true, std::sync::atomic::Ordering::SeqCst);
             let _ = app.emit_to(
@@ -133,7 +197,6 @@ pub fn build_and_swap(app: &AppHandle) {
 }
 
 /// Fetch the latest community lists and rebuild the engine.
-/// Returns a human-readable report.
 pub fn update_lists_blocking(app: &AppHandle) -> String {
     let state = app.state::<AppState>();
     let mut report = String::new();
@@ -150,10 +213,11 @@ pub fn update_lists_blocking(app: &AppHandle) -> String {
         }
     }
     build_and_swap(app);
-    let engine = state.engine.read().unwrap().clone();
-    match engine {
-        Some(e) => report.push_str(&format!("engine rebuilt: {} rules active\n", e.rule_count())),
-        None => report.push_str("engine rebuild FAILED\n"),
+    let rules = state.engine_rules.load(std::sync::atomic::Ordering::SeqCst);
+    if rules > 0 {
+        report.push_str(&format!("engine rebuilt: {rules} rules active\n"));
+    } else {
+        report.push_str("engine rebuild FAILED\n");
     }
     report
 }
