@@ -49,7 +49,7 @@ pub fn create_tab(
         .build();
 
     let settings: webkit::Settings =
-        webkit::WebView::settings(&webview).expect("webview settings");
+        <webkit::WebView as webkit::WebViewExt>::settings(&webview).expect("webview settings");
     apply_settings(&state, &settings);
 
     // Compiled network content filter (if already built).
