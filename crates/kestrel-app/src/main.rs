@@ -55,7 +55,7 @@ fn main() {
         .flags(gtk::gio::ApplicationFlags::HANDLES_OPEN)
         .build();
 
-    let smoke_cell: RefCell<Option<std::path::PathBuf>> = RefCell::new(None);
+    let smoke_cell = std::rc::Rc::new(RefCell::new(None));
     app.add_main_option(
         "smoke-test",
         b'0'.into(),
@@ -64,14 +64,17 @@ fn main() {
         "run the built-in smoke test, writing evidence to DIR",
         Some("DIR"),
     );
-    app.connect_handle_local_options(move |_, dict| {
+    {
+        let smoke_cell = smoke_cell.clone();
+        app.connect_handle_local_options(move |_, dict| {
         if let Some(v) = dict.lookup_value("smoke-test", Some(gtk::glib::VariantTy::STRING)) {
             if let Some(dir) = v.str() {
                 *smoke_cell.borrow_mut() = Some(std::path::PathBuf::from(dir));
             }
         }
         std::ops::ControlFlow::Continue(()) // continue normal startup
-    });
+        });
+    }
 
     let state = state::AppState::new(settings);
     {
