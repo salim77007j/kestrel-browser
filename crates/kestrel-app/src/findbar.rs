@@ -1,6 +1,7 @@
 //! Find-in-page bar backed by WebKitFindController.
 
 use gtk::prelude::*;
+use glib::translate::IntoGlib;
 use gtk::{glib, RevealerTransitionType};
 use std::rc::Rc;
 use webkit::prelude::*;

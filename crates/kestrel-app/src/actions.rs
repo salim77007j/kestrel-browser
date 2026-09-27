@@ -8,11 +8,8 @@ use std::rc::Rc;
 use webkit::prelude::*;
 
 pub fn install(w: &Rc<BrowserWindow>) {
-    let a = w.win.action_group().unwrap_or_else(|| {
-        let g = gio_shim();
-        w.win.insert_action_group("win", Some(&g));
-        g
-    });
+    let a = gio_shim();
+    w.win.insert_action_group("win", Some(&a));
 
     macro_rules! act {
         ($name:expr, $state:expr, $body:expr) => {{
@@ -82,8 +79,9 @@ pub fn install(w: &Rc<BrowserWindow>) {
     act!("save-page", w, |w| save_page(w));
     act!("devtools", w, |w| {
         if let Some(t) = w.current_tab() {
-            let inspector = t.webview.inspector();
-            inspector.show();
+            if let Some(inspector) = t.webview.inspector() {
+                inspector.show();
+            }
         }
     });
     act!("fullscreen-toggle", w, |w| {
@@ -118,7 +116,7 @@ pub fn install(w: &Rc<BrowserWindow>) {
     });
 
     // Parameterized select-tab action for Alt+1..8
-    let action = gio_shim_simple_action("select-tab", Some(String::static_variant_type()));
+    let action = gio_shim_simple_action("select-tab", Some(String::static_variant_type().as_ref()));
     {
         let w2 = w.clone();
         action.connect_activate(move |_, param| {
@@ -131,7 +129,7 @@ pub fn install(w: &Rc<BrowserWindow>) {
     a.add_action(&action);
 
     // Context-menu link actions (parameterized)
-    let open_link = gio_shim_simple_action("open-link", Some(String::static_variant_type()));
+    let open_link = gio_shim_simple_action("open-link", Some(String::static_variant_type().as_ref()));
     {
         let w2 = w.clone();
         open_link.connect_activate(move |_, param| {
@@ -142,7 +140,7 @@ pub fn install(w: &Rc<BrowserWindow>) {
     }
     a.add_action(&open_link);
 
-    let copy_link = gio_shim_simple_action("copy-link", Some(String::static_variant_type()));
+    let copy_link = gio_shim_simple_action("copy-link", Some(String::static_variant_type().as_ref()));
     {
         copy_link.connect_activate(move |_, param| {
             if let Some(uri) = param.and_then(|v| v.str().map(|s| s.to_string())) {

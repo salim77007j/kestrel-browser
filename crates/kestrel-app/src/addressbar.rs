@@ -127,7 +127,7 @@ impl AddressBar {
         // Keyboard navigation inside the popover.
         let this4 = self.clone();
         let key = EventControllerKey::new();
-        key.connect_key_pressed(glib::clone!(#[weak] this4, move |_, key, _, _| {
+        key.connect_key_pressed(glib::clone!(#[weak] this4, @default-return glib::Propagation::Proceed, move |_, key, _, _| {
             match key {
                 gtk::gdk::Key::Down => {
                     this4.move_selection(1);

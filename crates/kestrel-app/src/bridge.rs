@@ -209,15 +209,16 @@ fn handle_command(state: &Rc<AppState>, win: &Rc<BrowserWindow>, raw: &str) {
         }
         "update-filters" => state.update_lists_now(),
         "test-url" => {
-            let url = v["value"].as_str().unwrap_or("");
-            let source = "https://example.com/";
-            let result = state
-                .engine
-                .borrow()
-                .as_ref()
-                .map(|e| e.explain(url, source))
-                .unwrap_or_else(|| "engine still loading…".into());
-            push_to_view(win, &serde_json::json!({ "type": "test-url-result", "result": result }));
+            let url = v["value"].as_str().unwrap_or("").to_string();
+            let rrx = state.query_explain(&url, "https://example.com/");
+            let win2 = std::rc::Rc::downgrade(win);
+            glib::spawn_future_local(async move {
+                if let Ok(result) = rrx.recv().await {
+                    if let Some(w) = win2.upgrade() {
+                        push_to_view(&w, &serde_json::json!({ "type": "test-url-result", "result": result }));
+                    }
+                }
+            });
         }
         // ----- data clearing -----
         "clear-data" => {
@@ -265,7 +266,7 @@ fn handle_command(state: &Rc<AppState>, win: &Rc<BrowserWindow>, raw: &str) {
         "open-folder" => {
             let path = v["value"].as_str().unwrap_or("");
             let _ = std::process::Command::new("xdg-open")
-                .arg(std::path::Path::new(path).parent().unwrap_or_default())
+                .arg(std::path::Path::new(path).parent().unwrap_or(std::path::Path::new("/")))
                 .spawn();
         }
         "clear-downloads" => {
@@ -366,7 +367,7 @@ pub fn push_state(webview: &WebView, state: &Rc<AppState>) {
             "filters_active": state.filters_active.load(std::sync::atomic::Ordering::SeqCst),
             "compile_ok": state.filter_compile_ok.get(),
             "tracker_hosts": state.shield.borrow().tracker_host_count(),
-            "network_rules": state.engine.borrow().as_ref().map(|e| e.rule_count()).unwrap_or(0),
+            "network_rules": state.rule_count.get(),
             "total_rules": total_rules,
             "lifetime_blocked": s.lifetime_blocked,
             "statuses": status_json,

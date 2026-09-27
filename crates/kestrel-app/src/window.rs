@@ -16,7 +16,6 @@ pub struct BrowserWindow {
     pub handle: gtk::WindowHandle,
     pub stack: gtk::Stack,
     pub tabbar: gtk::Box,
-    pub tabs_box: gtk::Box,
     pub address: Rc<AddressBar>,
     pub back_btn: gtk::Button,
     pub fwd_btn: gtk::Button,
@@ -188,7 +187,6 @@ impl BrowserWindow {
             handle,
             stack,
             tabbar: tabs_box,
-            tabs_box,
             address,
             back_btn,
             fwd_btn,
@@ -208,7 +206,7 @@ impl BrowserWindow {
             private_strip,
         });
 
-        crate::menus::install(&w, &menu_btn);
+        crate::menus::install(&w, &w.menu_btn);
         crate::actions::install(&w);
         crate::window::wire_window_signals(&w, &newtab_btn, &min_btn, &max_btn, &close_btn, &back_btn, &fwd_btn, &reload_btn, &stop_btn, &home_btn, &downloads_btn);
 
@@ -350,7 +348,7 @@ impl BrowserWindow {
     }
 
     pub fn reopen_closed_tab(&self) {
-        let last = self.closed.borrow().pop();
+        let last = self.closed.borrow_mut().pop();
         if let Some((uri, _)) = last {
             self.new_tab(&uri, false, false);
         } else {

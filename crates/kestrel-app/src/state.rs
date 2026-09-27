@@ -1,37 +1,59 @@
 //! Shared application state: settings, database, privacy engine, filters,
 //! downloads, and the shared WebKit context.
 //!
-//! Threading model: the UI thread owns everything (GTK). Heavy filter work
-//! runs on worker threads; results come back over a `glib` channel whose
-//! receiver is awaited on the main loop with `spawn_future_local`.
+//! Threading model: GTK owns the UI thread. A dedicated *engine thread*
+//! owns the adblock engine (it is !Send, so it never crosses threads);
+//! filter-list IO happens on short-lived worker threads. All cross-thread
+//! traffic uses `async_channel`, whose receiver is awaited on the main loop.
 
 use crate::dl::DownloadCenter;
+use crate::wk::impl_rc_downgrade;
 use kestrel_privacy::lists::{ListId, ListManager, ListStatus};
 use kestrel_privacy::shield::Shield;
-use kestrel_privacy::{FingerprintMode, PrivacyEngine};
+use kestrel_privacy::{CosmeticResult, FingerprintMode};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use webkit::prelude::*;
 use webkit::{NetworkSession, UserContentFilter, WebContext};
 
+use kestrel_data::Settings;
+
 /// Messages from worker threads to the UI thread.
 pub enum WorkerMsg {
+    /// Engine thread finished (re)building; UI compiles the WebKit filter.
     FiltersLoaded {
-        engine: Option<Arc<PrivacyEngine>>,
         hosts: Vec<String>,
         cb_json: String,
         statuses: Vec<ListStatus>,
+        rule_count: usize,
     },
     ListsFetched,
+}
+
+/// Messages into the persistent engine thread.
+pub enum EngineMsg {
+    Rebuild {
+        rules: Vec<String>,
+        statuses: Vec<ListStatus>,
+    },
+    Cosmetic {
+        url: String,
+        reply: async_channel::Sender<CosmeticResult>,
+    },
+    Explain {
+        url: String,
+        source: String,
+        reply: async_channel::Sender<String>,
+    },
 }
 
 pub struct AppState {
     pub settings: RefCell<Settings>,
     pub db: RefCell<rusqlite::Connection>,
-    pub engine: RefCell<Option<Arc<PrivacyEngine>>>,
+    engine_tx: RefCell<Option<async_channel::Sender<EngineMsg>>>,
+    pub rule_count: Cell<usize>,
     pub shield: RefCell<Shield>,
     pub network_filter: RefCell<Option<UserContentFilter>>,
     pub filters_active: Arc<AtomicBool>,
@@ -41,11 +63,10 @@ pub struct AppState {
     pub downloads: DownloadCenter,
     pub windows: RefCell<Vec<crate::window::BrowserWindow>>,
     pub list_statuses: RefCell<Vec<ListStatus>>,
-    pub filter_compile_ok: Cell<bool>,
+    pub filter_compile_ok: Cell<bool>
+    ,
     tx: RefCell<Option<async_channel::Sender<WorkerMsg>>>,
 }
-
-use kestrel_data::Settings;
 
 impl AppState {
     pub fn new(settings: Settings) -> Rc<Self> {
@@ -65,7 +86,7 @@ impl AppState {
         );
 
         // Security defaults: fail closed on TLS errors, third-party cookie
-        // control, ITP available.
+        // control.
         session.set_tls_errors_policy(webkit::TLSErrorsPolicy::Fail);
         let cookie_policy = if settings.block_third_party_cookies {
             webkit::CookieAcceptPolicy::NoThirdParty
@@ -79,7 +100,8 @@ impl AppState {
         let this = Rc::new(Self {
             settings: RefCell::new(settings),
             db: RefCell::new(db),
-            engine: RefCell::new(None),
+            engine_tx: RefCell::new(None),
+            rule_count: Cell::new(0),
             shield: RefCell::new(Shield::new(&[])),
             network_filter: RefCell::new(None),
             filters_active: Arc::new(AtomicBool::new(false)),
@@ -94,13 +116,14 @@ impl AppState {
         });
 
         crate::pages::register_scheme(&this);
-        this.install_worker_channel();
+        this.install_channels();
         this.reload_filters();
 
         this
     }
 
-    fn install_worker_channel(self: &Rc<Self>) {
+    fn install_channels(self: &Rc<Self>) {
+        // ---- UI channel (worker -> main loop) ----
         let (tx, rx) = async_channel::unbounded::<WorkerMsg>();
         *self.tx.borrow_mut() = Some(tx);
         let weak = Rc::downgrade(self);
@@ -115,12 +138,51 @@ impl AppState {
                 }
             }
         });
+
+        // ---- persistent engine thread (owns the !Send adblock engine) ----
+        let (etx, erx) = async_channel::unbounded::<EngineMsg>();
+        *self.engine_tx.borrow_mut() = Some(etx);
+        let ui_tx = self.tx.borrow().as_ref().map(|t| t.clone()).unwrap();
+        std::thread::Builder::new()
+            .name("kestrel-engine".into())
+            .spawn(move || {
+                let mut engine: Option<PrivacyEngine> = None;
+                loop {
+                    match erx.recv_blocking() {
+                        Ok(EngineMsg::Rebuild { rules, statuses }) => {
+                            let rule_count = rules.len();
+                            engine = kestrel_privacy::PrivacyEngine::from_rules(&rules).ok();
+                            let hosts = kestrel_privacy::lists::extract_tracker_hosts(&rules);
+                            let cb_json =
+                                kestrel_privacy::converter::to_content_blocker(&rules, 120_000)
+                                    .unwrap_or_else(|_| "[]".into());
+                            let _ = ui_tx.send(WorkerMsg::FiltersLoaded { hosts, cb_json, statuses, rule_count });
+                        }
+                        Ok(EngineMsg::Cosmetic { url, reply }) => {
+                            let res = engine
+                                .as_ref()
+                                .map(|e| e.cosmetic(&url))
+                                .unwrap_or_default();
+                            let _ = reply.send_blocking(res);
+                        }
+                        Ok(EngineMsg::Explain { url, source, reply }) => {
+                            let res = engine
+                                .as_ref()
+                                .map(|e| e.explain(&url, &source))
+                                .unwrap_or_else(|| "engine still loading…".into());
+                            let _ = reply.send_blocking(res);
+                        }
+                        Err(_) => return,
+                    }
+                }
+            })
+            .expect("engine thread");
     }
 
     fn handle_worker_msg(self: &Rc<Self>, msg: WorkerMsg) {
         match msg {
-            WorkerMsg::FiltersLoaded { engine, hosts, cb_json, statuses } => {
-                self.on_filters_loaded(engine, hosts, cb_json, statuses);
+            WorkerMsg::FiltersLoaded { hosts, cb_json, statuses, rule_count } => {
+                self.on_filters_loaded(hosts, cb_json, statuses, rule_count);
             }
             WorkerMsg::ListsFetched => self.reload_filters(),
         }
@@ -130,9 +192,29 @@ impl AppState {
         FingerprintMode::from_key(&self.settings.borrow().fingerprint_protection)
     }
 
+    /// Ask the engine thread for cosmetic decisions; reply arrives on the UI loop.
+    pub fn query_cosmetic(&self, url: &str) -> async_channel::Receiver<CosmeticResult> {
+        let (rtx, rrx) = async_channel::bounded::<CosmeticResult>(1);
+        if let Some(tx) = self.engine_tx.borrow().as_ref() {
+            let _ = tx.send_blocking(EngineMsg::Cosmetic { url: url.to_string(), reply: rtx });
+        } else {
+            let _ = rtx.send_blocking(CosmeticResult::default());
+        }
+        rrx
+    }
+
+    pub fn query_explain(&self, url: &str, source: &str) -> async_channel::Receiver<String> {
+        let (rtx, rrx) = async_channel::bounded::<String>(1);
+        if let Some(tx) = self.engine_tx.borrow().as_ref() {
+            let _ = tx.send_blocking(EngineMsg::Explain { url: url.to_string(), source: source.to_string(), reply: rtx });
+        } else {
+            let _ = rtx.send_blocking("engine still loading…".into());
+        }
+        rrx
+    }
+
     /// Called once on app startup: session bookkeeping.
     pub fn on_startup(&self) {
-        // Crash detection uses the marker from the previous run.
         let _crashed = kestrel_data::session::previous_run_crashed();
         kestrel_data::session::clear_marker();
     }
@@ -159,7 +241,7 @@ impl AppState {
         slot.as_ref().unwrap().clone()
     }
 
-    /// Rebuild engine + tracker set + compiled network filter (worker thread).
+    /// Rebuild engine + tracker set + compiled network filter (worker threads).
     pub fn reload_filters(&self) {
         let enabled: HashMap<String, bool> = self
             .settings
@@ -170,30 +252,24 @@ impl AppState {
             .collect();
         let custom = self.settings.borrow().custom_filters.clone();
         let lists_dir = kestrel_data::dirs::base_data().join("filters");
-        let tx = self.tx.borrow().as_ref().map(|t| t.clone());
-        let Some(tx) = tx else { return };
+        let etx = self.engine_tx.borrow().as_ref().map(|t| t.clone());
+        let Some(etx) = etx else { return };
 
         std::thread::spawn(move || {
             let manager = ListManager::new(&lists_dir);
             let (rules, statuses) = manager.load_all(&enabled, &custom);
-            let engine = PrivacyEngine::from_rules(&rules).ok();
-            let hosts = kestrel_privacy::lists::extract_tracker_hosts(&rules);
-            let cb_json = kestrel_privacy::converter::to_content_blocker(&rules, 120_000)
-                .unwrap_or_else(|_| "[]".into());
-            let _ = tx.send(WorkerMsg::FiltersLoaded { engine, hosts, cb_json, statuses });
+            let _ = etx.send_blocking(EngineMsg::Rebuild { rules, statuses });
         });
     }
 
     fn on_filters_loaded(
         self: &Rc<Self>,
-        engine: Option<Arc<PrivacyEngine>>,
         hosts: Vec<String>,
         cb_json: String,
         statuses: Vec<ListStatus>,
+        rule_count: usize,
     ) {
-        if let Some(eng) = engine {
-            *self.engine.borrow_mut() = Some(eng);
-        }
+        self.rule_count.set(rule_count);
         self.shield.borrow_mut().update_hosts(&hosts);
         *self.list_statuses.borrow_mut() = statuses;
 
@@ -236,7 +312,7 @@ impl AppState {
         std::thread::spawn(move || {
             let manager = ListManager::new(&lists_dir);
             let _ = manager.fetch_all(&ListId::ALL);
-            let _ = tx.send(WorkerMsg::ListsFetched);
+            let _ = tx.send_blocking(WorkerMsg::ListsFetched);
         });
     }
 
@@ -267,15 +343,4 @@ impl AppState {
     }
 }
 
-impl glib::clone::Downgrade for AppState {
-    type Weak = std::rc::Weak<AppState>;
-    fn downgrade(&self) -> Self::Weak {
-        std::rc::Weak::downgrade(self)
-    }
-}
-impl glib::clone::Upgrade for std::rc::Weak<AppState> {
-    type Strong = std::rc::Rc<AppState>;
-    fn upgrade(&self) -> Option<Self::Strong> {
-        std::rc::Weak::upgrade(self)
-    }
-}
+impl_rc_downgrade!(AppState);

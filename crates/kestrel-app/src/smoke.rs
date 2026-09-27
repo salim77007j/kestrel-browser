@@ -95,7 +95,7 @@ fn capture_all(state: &Rc<AppState>, w: &Rc<BrowserWindow>, outdir: &Path) {
     }
 
     // Overall stats.
-    let engine_rules = state.engine.borrow().as_ref().map(|e| e.rule_count()).unwrap_or(0);
+    let engine_rules = state.rule_count.get();
     let report = serde_json::json!({
         "status": "ok",
         "version": env!("CARGO_PKG_VERSION"),

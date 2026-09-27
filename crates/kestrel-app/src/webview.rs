@@ -48,7 +48,7 @@ pub fn create_tab(
         .network_session(&session)
         .build();
 
-    let settings = webview.settings();
+    let settings: webkit::Settings = webview.property("settings");
     apply_settings(&state, &settings);
 
     // Compiled network content filter (if already built).
@@ -156,6 +156,7 @@ fn wire_webview(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, we
             LoadEvent::Committed => {
                 inject_cosmetic(state, v);
             }
+            _ => {}
             LoadEvent::Finished => {
                 tab2.spinner.stop();
                 tab2.spinner.set_visible(false);
@@ -410,39 +411,37 @@ fn on_finished(state: &Rc<AppState>, win: &Rc<BrowserWindow>, tab: &Rc<Tab>, v: 
 }
 
 fn inject_cosmetic(state: &Rc<AppState>, v: &WebView) {
-    let Some(engine) = state.engine.borrow().as_ref().cloned() else { return };
     let Some(uri) = v.uri().map(|u| u.to_string()) else { return };
     if uri.starts_with("kestrel://") || uri.starts_with("about:") || uri.starts_with("data:") {
         return;
     }
-    let cosmetic = engine.cosmetic(&uri);
-    let count = cosmetic.hide_css.len() as u64;
-    if count == 0 && cosmetic.injected_script.is_empty() {
-        return;
-    }
-    let mut js = String::new();
-    if !cosmetic.hide_css.is_empty() {
-        let selectors: Vec<String> = cosmetic
-            .hide_css
-            .iter()
-            .map(|s| serde_json::to_string(s).unwrap_or_default())
-            .collect();
-        js.push_str("(function(){try{var css=document.createElement('style');css.textContent=");
-        js.push_str(&format!(
-            "[{}].map(function(s){{return s+'{{display:none !important}}'}}).join('\\n');",
-            selectors.join(",")
-        ));
-        js.push_str("(document.head||document.documentElement).appendChild(css);}catch(e){}})();");
-    }
-    if !cosmetic.injected_script.is_empty() {
-        js.push_str(&cosmetic.injected_script);
-    }
-    let _ = v.evaluate_javascript(&js, None::<&str>, None::<&str>, None::<&gio::Cancellable>, |_| {});
-
-    if count > 0 {
-        state.settings.borrow_mut().lifetime_blocked += count;
-        // Cheap persistence: debounce via the same settings save on tab close.
-    }
+    let rrx = state.query_cosmetic(&uri);
+    let webview = v.clone();
+    glib::spawn_future_local(async move {
+        let Ok(cosmetic) = rrx.recv().await else { return };
+        let count = cosmetic.hide_css.len() as u64;
+        if count == 0 && cosmetic.injected_script.is_empty() {
+            return;
+        }
+        let mut js = String::new();
+        if !cosmetic.hide_css.is_empty() {
+            let selectors: Vec<String> = cosmetic
+                .hide_css
+                .iter()
+                .map(|s| serde_json::to_string(s).unwrap_or_default())
+                .collect();
+            js.push_str("(function(){try{var css=document.createElement('style');css.textContent=");
+            js.push_str(&format!(
+                "[{}].map(function(s){{return s+'{{{{display:none !important}}}}'}}).join('\\n');",
+                selectors.join(",")
+            ));
+            js.push_str("(document.head||document.documentElement).appendChild(css);}catch(e){}})();");
+        }
+        if !cosmetic.injected_script.is_empty() {
+            js.push_str(&cosmetic.injected_script);
+        }
+        let _ = webview.evaluate_javascript(&js, None::<&str>, None::<&str>, None::<&gtk::gio::Cancellable>, |_| {});
+    });
 }
 
 fn fav_char(uri: &str) -> String {
