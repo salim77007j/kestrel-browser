@@ -109,9 +109,12 @@ a:hover { text-decoration: underline; }
 .toggle input:checked + .track { background: var(--accent-dim); border-color: var(--accent); }
 .toggle input:checked + .track::after { transform: translateX(18px); background: var(--accent); }
 
-/* selects & inputs */
+/* selects & inputs — appearance:none is REQUIRED on WebKitGTK: the native
+   menulist rendering ignores background/color and ends up white-on-white. */
 select, input[type=text], input[type=search] {
-  background: var(--bg);
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--raise);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 9px;
@@ -120,7 +123,14 @@ select, input[type=text], input[type=search] {
   outline: none;
   font-family: inherit;
 }
+select {
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2393A0B4' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+}
 select:focus, input:focus { border-color: var(--accent); }
+select option { background: var(--surface); color: var(--text); }
 
 /* buttons */
 button.k {

@@ -52,7 +52,10 @@ impl BrowserWindow {
         let scroller = gtk::ScrolledWindow::builder()
             .hscrollbar_policy(gtk::PolicyType::Automatic)
             .vscrollbar_policy(gtk::PolicyType::Never)
-            .propagate_natural_width(false)
+            // Give the tab strip its NATURAL width (full tab titles) and
+            // only scroll when it exceeds the window; with `false` GTK
+            // allocates the MINIMUM width and tabs collapse to chips.
+            .propagate_natural_width(true)
             .build();
         scroller.add_css_class("k-tabs-scroller");
 
