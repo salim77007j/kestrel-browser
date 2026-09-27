@@ -42,11 +42,20 @@ pub fn run(w: &Rc<BrowserWindow>, outdir: PathBuf) {
     let state = w.state.clone();
     let w_weak = std::rc::Rc::downgrade(w);
     let outdir_a = outdir.clone();
-    glib::timeout_add_local(std::time::Duration::from_millis(4000), move || {
-        if let Some(w) = w_weak.upgrade() {
-            capture_all(&state, &w, &outdir_a);
+    let start = std::time::Instant::now();
+    glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
+        // Wait until the compiled content filter is active (max 45s) so the
+        // evidence reflects the fully-initialized privacy stack.
+        if state.filters_active.load(std::sync::atomic::Ordering::SeqCst)
+            || start.elapsed() > std::time::Duration::from_secs(45)
+        {
+            if let Some(w) = w_weak.upgrade() {
+                capture_all(&state, &w, &outdir_a);
+            }
+            glib::ControlFlow::Break
+        } else {
+            glib::ControlFlow::Continue
         }
-        glib::ControlFlow::Break
     });
 
     // Hard deadline: exit with failure if we somehow hang.
