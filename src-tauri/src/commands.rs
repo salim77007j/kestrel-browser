@@ -846,7 +846,8 @@ pub fn set_permission(app: AppHandle, origin: String, kind: String, decision: St
 #[tauri::command]
 pub fn list_permissions(app: AppHandle) -> Value {
     let s = state(&app);
-    serde_json::to_value(s.permissions.lock().unwrap().snapshot().clone()).unwrap_or(json!({}))
+    let snap = { s.permissions.lock().unwrap().snapshot().clone() };
+    serde_json::to_value(snap).unwrap_or(json!({}))
 }
 
 #[tauri::command]

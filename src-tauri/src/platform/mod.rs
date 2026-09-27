@@ -60,7 +60,7 @@ pub mod windows_impl {
 
     /// Mute a tab through ICoreWebView2_8::SetIsMuted.
     pub fn set_muted(webview: &Webview<tauri::Wry>, muted: bool) -> bool {
-        with_core(webview, |core| {
+        with_core(webview, move |core| {
             match core.cast::<ICoreWebView2_8>() {
                 Ok(core8) => unsafe { core8.SetIsMuted(muted).is_ok() },
                 Err(_) => false,
