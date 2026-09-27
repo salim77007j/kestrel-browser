@@ -20,7 +20,7 @@ pub fn run(w: &Rc<BrowserWindow>, outdir: PathBuf) {
     let _ = std::fs::write(
         &test_page,
         format!(
-            "<!doctype html><html><head><title>Kestrel Test Page</title>\
+            "<!doctype html><html><head><meta charset=\"utf-8\"><title>Kestrel Test Page</title>\
              <style>body{{font-family:sans-serif;background:#12161C;color:#E6EAF0;\
              display:flex;flex-direction:column;align-items:center;justify-content:center;\
              height:100vh;margin:0}}h1{{color:#2DD4BF}}</style></head>\

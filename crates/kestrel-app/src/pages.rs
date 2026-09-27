@@ -24,10 +24,14 @@ pub fn register_scheme(state: &Rc<AppState>) {
     let weak = Rc::downgrade(state);
     state.webctx.register_uri_scheme("kestrel", move |request: &webkit::URISchemeRequest| {
         let Some(_state) = weak.upgrade() else { return };
-        let path = request
-            .path()
-            .map(|p| p.to_string())
-            .unwrap_or_default();
+        // Parse the FULL uri, not request.path(): URL parsing treats the
+        // segment after `kestrel://` as a HOST (e.g. "assets" in
+        // kestrel://assets/app.css), so path() would return "/app.css" and
+        // every embedded asset would 404. Taking the raw uri keeps the
+        // first segment in the matched key.
+        let uri = request.uri().to_string();
+        let rest = uri.strip_prefix("kestrel://").unwrap_or(&uri);
+        let path = rest.split(['?', '#']).next().unwrap_or("");
         let path = path.trim_start_matches('/');
         let (page, _query) = match path.split_once('?') {
             Some((p, q)) => (p, q),
